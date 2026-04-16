@@ -20,6 +20,7 @@ import {
   updateDocifyTemplate,
   updateDocifyTemplateVariable,
 } from '@/lib/editor-api'
+import { decodeBase64Utf8 } from '@/lib/base64'
 import type { EditorConfig } from '@/lib/editor-types'
 
 interface PdfTemplate {
@@ -200,8 +201,7 @@ export default function DocifyMovePage() {
 
       const jsonData = await response.json()
       if (jsonData.data) {
-        // Decode base64 HTML
-        const decodedHtml = atob(jsonData.data)
+        const decodedHtml = decodeBase64Utf8(jsonData.data)
         return decodedHtml
       }
       return ''

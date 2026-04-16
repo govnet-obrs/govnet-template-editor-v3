@@ -9,6 +9,7 @@ import { DocifyEditorHeader } from '../../../components/DocifyEditorHeader'
 import { DocifyEditorTabs } from '@/components/DocifyEditorTabs'
 import { extractGoTemplateVariables, mergeVariablesWithJson } from '@/lib/extract-template-variables'
 import { updateDocifyTemplate, updateDocifyTemplateVariable } from '@/lib/editor-api'
+import { decodeBase64Utf8 } from '@/lib/base64'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
 import type { PageSettings } from '@/components/SettingsEditor'
@@ -158,8 +159,7 @@ export default function DocifyEditorPage() {
                 if (response.ok) {
                     const jsonData = await response.json()
                     if (jsonData.data) {
-                        // Decode base64 HTML
-                        const decodedHtml = atob(jsonData.data)
+                        const decodedHtml = decodeBase64Utf8(jsonData.data)
                         setInitialHtmlContent(decodedHtml)
                     }
                 }
