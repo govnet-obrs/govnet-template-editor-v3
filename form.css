@@ -1,0 +1,308 @@
+/***Always insert a page break before the element***/
+.pb_before {
+   page-break-before: always !important;
+}
+
+/***Always insert a page break after the element***/
+.pb_after {
+   page-break-after: always !important;
+}
+
+/***Avoid page break before the element (if possible)***/
+.pb_before_avoid {
+   page-break-before: avoid !important;
+}
+
+/***Avoid page break after the element (if possible)***/
+.pb_after_avoid {
+   page-break-after: avoid !important;
+ }
+
+/* Avoid page break inside the element (if possible) */
+.pbi_avoid {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
+
+h1,
+h2 {
+  line-height: 1.5;
+}
+
+p {
+  line-height: 1.6;
+}
+
+body,
+html {
+  font-family: "Times New Roman", serif;
+}
+
+body {
+  display: block;
+}
+
+.page {
+  color: #231f20;
+}
+
+.text-sm {
+  font-size: 8pt;
+}
+
+.text-md {
+  font-size: 11pt;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-justify {
+  text-align: justify;
+}
+
+.bold {
+  font-weight: bold;
+}
+
+.m-0 {
+  margin: 0;
+}
+
+.mb-0 {
+  margin-bottom: 0;
+}
+.mt-0 {
+  margin-top: 0;
+}
+.ml-auto {
+  margin-left: auto;
+}
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.p-0 {
+  padding: 0;
+}
+
+.pl-sm {
+  padding-left: 8px;
+}
+
+.pl-md {
+  padding-left: 12px;
+}
+
+.pb-md {
+  padding-bottom: 12px;
+}
+
+.pb-sm {
+  padding-bottom: 8px;
+}
+
+.value {
+  font-weight: bold;
+  display: inline-block;
+  text-transform: uppercase;
+  min-width: 24px;
+}
+
+.value--bordered {
+  font-weight: bold;
+  display: inline-block;
+  border-bottom: 1px solid;
+  text-transform: uppercase;
+  min-width: 24px;
+}
+
+.value-underlined {
+  font-weight: bold;
+  border-bottom: 1px solid;
+  text-transform: uppercase;
+  min-width: 24px;
+  text-decoration-line: underline;
+}
+
+.list-alpha {
+  counter-reset: alpha-list;
+  line-height: 1.8em;
+}
+
+.list-alpha>li {
+  list-style: none;
+}
+
+.list-alpha>li:before {
+  content: "(" counter(alpha-list, lower-alpha) ") ";
+  counter-increment: alpha-list;
+}
+
+.list-num {
+  counter-reset: num-list;
+  line-height: 1.8em;
+}
+
+.list-num>li {
+  list-style: none;
+}
+
+.list-num>li:before {
+  content: "(" counter(num-list, decimal) ") ";
+  counter-increment: num-list;
+}
+
+.list-loose li {
+  margin-bottom: 18px;
+  line-height: 2.5em;
+}
+.list-normal li {
+  margin-bottom: 12px;
+  line-height: 1.5em;
+}
+
+.list-md li {
+  margin-bottom: 16px;
+  line-height: 1.8em;
+}
+
+.list-lg>li:before {
+  font-size: 20px;
+}
+
+.inline-block {
+  display: inline-block;
+}
+
+.block {
+  display: block;
+}
+
+.flex-columns {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-rows {
+  display: flex;
+  flex-direction: row;
+}
+
+.indent-lg {
+  text-indent: 20pt;
+}
+
+.indent-sm {
+  text-indent: 8pt;
+}
+
+
+table {
+  border-collapse: collapse; 
+  width: 100%;
+}
+
+td, th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+}
+
+table tr td:before,
+table tr td:after {
+    content: "";
+    height: 4px;
+    display: block;
+}
+
+table tr th:before,
+table tr th:after {
+    content: "";
+    height: 4px;
+    display: block;
+}
+
+tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+
+td,
+th {
+  color: #231f20;
+  padding: 12px;
+  vertical-align: center;
+  font-size: 12px;
+  font-weight: normal;
+  text-align: left;
+}
+
+.text-normal,
+table.text-normal td {
+  font-weight: normal;
+}
+
+td {
+  font-weight: bold;
+}
+
+.content-box {
+  page-break-inside: avoid !important;
+  break-inside: avoid;
+}
+
+table,
+th,
+td {
+  border: 1px solid #231f20;
+}
+
+.line-break {
+  height: 20px;
+  width: 100%;
+}
+
+.w-full {
+  width: 100%;
+}
+
+
+.text-bubu-pink {
+   color: #cd5476;
+}
+.value--bubu-pink {
+   color: #cd5476;
+  border-color: #cd5476;
+}
+.text-red {
+  color: red;
+}
+.text-muted {
+  color: #444;
+}
+
+.value--red {
+  color: red;
+  border-color: red;
+}
+
+.underline {
+  text-decoration: underline;
+}
