@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import type { PageSettings } from '@/components/SettingsEditor'
 
 interface DocifyPreviewPanelProps {
     htmlContent: string
+    pageSettings: PageSettings
     previewMode: 'html' | 'pdf'
     onPreviewModeChange: (mode: 'html' | 'pdf') => void
     apiUrl: string
@@ -15,6 +17,7 @@ interface DocifyPreviewPanelProps {
 
 export function DocifyPreviewPanel({
     htmlContent,
+    pageSettings,
     previewMode,
     onPreviewModeChange,
     apiUrl,
@@ -39,8 +42,8 @@ export function DocifyPreviewPanel({
             setPdfError('Missing document generator API URL')
             return
         }
-        if (!templateName) {
-            setPdfError('Missing template name')
+        if (!htmlContent?.trim()) {
+            setPdfError('Missing template HTML content')
             return
         }
 
@@ -73,6 +76,8 @@ export function DocifyPreviewPanel({
                     templateName,
                     description,
                     data: dataPayload,
+                    templateContent: htmlContent,
+                    pageSettings,
                 }),
             })
 
@@ -91,7 +96,7 @@ export function DocifyPreviewPanel({
         } finally {
             setIsGenerating(false)
         }
-    }, [apiUrl, templateName, description, sampleData, isGenerating, revokePdfUrl])
+    }, [apiUrl, templateName, description, sampleData, htmlContent, pageSettings, isGenerating, revokePdfUrl])
 
     useEffect(() => {
         return () => {

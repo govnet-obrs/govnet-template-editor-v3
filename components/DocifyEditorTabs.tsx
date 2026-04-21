@@ -126,6 +126,7 @@ export function DocifyEditorTabs({
                 <ResizablePanel defaultSize={50} minSize={30}>
                     <DocifyPreviewPanel
                         htmlContent={htmlContent}
+                        pageSettings={pageSettings}
                         previewMode={previewMode}
                         onPreviewModeChange={onPreviewModeChange}
                         apiUrl={apiUrl}
