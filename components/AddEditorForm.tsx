@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,11 +24,19 @@ import { toast } from 'sonner'
 
 interface AddEditorFormProps {
   existingEditors: EditorConfig[]
+  editingEditor?: EditorConfig | null
   onSave: (editor: EditorConfig) => void
   onCancel: () => void
 }
 
-export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFormProps) {
+export function AddEditorForm({
+  existingEditors,
+  editingEditor,
+  onSave,
+  onCancel,
+}: AddEditorFormProps) {
+  const isEditMode = Boolean(editingEditor)
+
   const [name, setName] = useState('')
   const [type, setType] = useState<EditorType>('notify')
   const [syncMode, setSyncMode] = useState<SyncMode>('online')
@@ -37,6 +45,29 @@ export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFo
   const [credentials, setCredentials] = useState<Array<{ key: string; value: string }>>([
     { key: '', value: '' },
   ])
+
+  useEffect(() => {
+    if (!editingEditor) {
+      setName('')
+      setType('notify')
+      setSyncMode('online')
+      setApiUrl('')
+      setCredentialsType('header')
+      setCredentials([{ key: '', value: '' }])
+      return
+    }
+
+    setName(editingEditor.name)
+    setType(editingEditor.type)
+    setSyncMode(editingEditor.syncMode)
+    setApiUrl(editingEditor.apiUrl || '')
+    setCredentialsType(editingEditor.credentialsType)
+    setCredentials(
+      editingEditor.credentials.length > 0
+        ? editingEditor.credentials
+        : [{ key: '', value: '' }]
+    )
+  }, [editingEditor])
 
   const handleAddCredential = () => {
     setCredentials([...credentials, { key: '', value: '' }])
@@ -64,11 +95,13 @@ export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFo
       return
     }
 
-    // Check if editor with same name already exists (case-insensitive)
+    const currentEditorId = editingEditor?.id
     const nameExists = existingEditors.some(
-      (editor) => editor.name.toLowerCase() === name.trim().toLowerCase()
+      (editor) =>
+        editor.id !== currentEditorId &&
+        editor.name.toLowerCase() === name.trim().toLowerCase()
     )
-    
+
     if (nameExists) {
       toast.error(`An editor with the name "${name.trim()}" already exists`)
       return
@@ -80,29 +113,36 @@ export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFo
     }
 
     const validCredentials = credentials.filter((c) => c.key.trim())
+    const now = new Date().toISOString()
 
     const editor: EditorConfig = {
-      id: `editor-${Date.now()}`,
+      id: editingEditor?.id || `editor-${Date.now()}`,
       name: name.trim(),
       type,
       syncMode,
       apiUrl: apiUrl.trim(),
       credentialsType,
       credentials: validCredentials,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: editingEditor?.createdAt || now,
+      updatedAt: now,
     }
 
     onSave(editor)
-    toast.success(`Editor "${name}" created successfully`)
+    toast.success(
+      isEditMode
+        ? `Editor "${name.trim()}" updated successfully`
+        : `Editor "${name.trim()}" created successfully`
+    )
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Create New Editor</CardTitle>
+        <CardTitle>{isEditMode ? 'Edit Editor' : 'Create New Editor'}</CardTitle>
         <CardDescription>
-          Set up a new template editor with your API configuration
+          {isEditMode
+            ? 'Update your template editor configuration'
+            : 'Set up a new template editor with your API configuration'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -120,7 +160,7 @@ export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFo
 
             <div className="space-y-2 w-full">
               <Label htmlFor="editor-type">Editor Type</Label>
-              <Select  value={type} onValueChange={(value) => setType(value as EditorType)}>
+              <Select value={type} onValueChange={(value) => setType(value as EditorType)}>
                 <SelectTrigger id="editor-type" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -237,7 +277,7 @@ export function AddEditorForm({ existingEditors, onSave, onCancel }: AddEditorFo
 
           <div className="flex gap-3 pt-4">
             <Button type="submit" className="flex-1">
-              Create Editor
+              {isEditMode ? 'Save Changes' : 'Create Editor'}
             </Button>
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel

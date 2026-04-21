@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AddEditorForm } from "@/components/AddEditorForm";
 import { EditorList } from "@/components/EditorList";
 import { useEditorStorage } from "@/hooks/useEditorStorage";
-import { NotificationTemplateEditor } from "@/components/NotificationTemplateEditor";
-import { DocumentTemplateEditor } from "@/components/DocumentTemplateEditor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,65 +11,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { EditorConfig } from "@/lib/editor-types";
 
 export default function Page() {
   const { editors, isLoaded, saveEditor, deleteEditor } = useEditorStorage();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedEditor, setSelectedEditor] = useState<EditorConfig | null>(
-    null,
-  );
-
-  useEffect(() => {
-    if (selectedEditor) {
-      const updated = editors.find((e) => e.id === selectedEditor.id);
-      if (updated) {
-        setSelectedEditor(updated);
-      }
-    }
-  }, [editors, selectedEditor]);
+  const [editingEditor, setEditingEditor] = useState<EditorConfig | null>(null);
 
   if (!isLoaded) {
     return (
       <main className="min-h-screen bg-background">
         <div className="mx-auto max-w-6xl px-4 py-8">
           <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (selectedEditor) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="mx-auto max-w-4xl px-4 py-8">
-          <Button
-            variant="ghost"
-            onClick={() => setSelectedEditor(null)}
-            className="mb-4 gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Editors
-          </Button>
-
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {selectedEditor.name}
-            </h1>
-            <p className="mt-2 text-muted-foreground">
-              {selectedEditor.type === "notify"
-                ? "Notify Template"
-                : "Docify Template"}{" "}
-              Editor
-            </p>
-          </div>
-
-          {selectedEditor.type === "notify" ? (
-            <NotificationTemplateEditor config={selectedEditor} />
-          ) : (
-            <DocumentTemplateEditor config={selectedEditor} />
-          )}
         </div>
       </main>
     );
@@ -97,7 +49,13 @@ export default function Page() {
               configured
             </p>
           </div>
-          <Button onClick={() => setShowAddForm(true)} className="gap-2">
+          <Button
+            onClick={() => {
+              setEditingEditor(null);
+              setShowAddForm(true);
+            }}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             Add Editor
           </Button>
@@ -106,21 +64,39 @@ export default function Page() {
         <EditorList
           editors={editors}
           onDeleteEditor={deleteEditor}
-          onSelectEditor={setSelectedEditor}
+          onEditEditor={(editor) => {
+            setEditingEditor(editor);
+            setShowAddForm(true);
+          }}
         />
 
-        <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
+        <Dialog
+          open={showAddForm}
+          onOpenChange={(open) => {
+            setShowAddForm(open);
+            if (!open) {
+              setEditingEditor(null);
+            }
+          }}
+        >
           <DialogContent className="w-full max-w-2xl  max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Editor</DialogTitle>
+              <DialogTitle>
+                {editingEditor ? "Edit Editor" : "Add New Editor"}
+              </DialogTitle>
             </DialogHeader>
             <AddEditorForm
               existingEditors={editors}
+              editingEditor={editingEditor}
               onSave={(editor) => {
                 saveEditor(editor);
                 setShowAddForm(false);
+                setEditingEditor(null);
               }}
-              onCancel={() => setShowAddForm(false)}
+              onCancel={() => {
+                setShowAddForm(false);
+                setEditingEditor(null);
+              }}
             />
           </DialogContent>
         </Dialog>

@@ -17,19 +17,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Bell, FileText, Plus, Trash2 } from "lucide-react";
+import { Bell, FileText, Trash2 } from "lucide-react";
 import type { EditorConfig } from "@/lib/editor-types";
 
 interface EditorListProps {
   editors: EditorConfig[];
   onDeleteEditor: (editorId: string) => void;
-  onSelectEditor: (editor: EditorConfig) => void;
+  onEditEditor: (editor: EditorConfig) => void;
 }
 
 export function EditorList({
   editors,
   onDeleteEditor,
-  onSelectEditor,
+  onEditEditor,
 }: EditorListProps) {
   const getEditorIcon = (type: string) => {
     return type === "notify" ? (
@@ -134,7 +134,7 @@ export function EditorList({
               >
                 Open Editor
               </Button>
-              <Button onClick={() => onSelectEditor(editor)} variant="outline">
+              <Button onClick={() => onEditEditor(editor)} variant="outline">
                 Edit
               </Button>
             </div>
