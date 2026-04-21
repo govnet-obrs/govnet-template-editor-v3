@@ -42,7 +42,7 @@ export default function DocifyEditorPage() {
     const currentEditor = searchParams.get('editor') || 'code'
 
     const { getEditor, isLoaded: editorStorageLoaded } = useEditorStorage()
-    const { syncStatus, triggerSync, autoSyncEnabled, setAutoSyncEnabled } = useTemplateSync()
+    const { syncStatus, triggerSync, autoSyncEnabled, setAutoSyncEnabled } = useTemplateSync(editorId || undefined)
 
     const [editor, setEditor] = useState<EditorConfig | null>(null)
     const [template, setTemplate] = useState<PdfTemplate | null>(null)

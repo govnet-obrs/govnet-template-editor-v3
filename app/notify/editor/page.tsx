@@ -52,6 +52,29 @@ interface NotificationTemplate {
   channel?: string
 }
 
+function getInitialTemplate(templateId: string | null): NotificationTemplate | null {
+  if (!templateId || typeof window === 'undefined') {
+    return null
+  }
+
+  const storedData = localStorage.getItem(`template-${templateId}`)
+  if (!storedData) {
+    return null
+  }
+
+  try {
+    const { expiry, template } = JSON.parse(storedData)
+    if (expiry && Date.now() > expiry) {
+      return null
+    }
+
+    return template ?? null
+  } catch (err) {
+    console.error('Failed to parse stored template:', err)
+    return null
+  }
+}
+
 export default function NotifyEditorPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -59,7 +82,7 @@ export default function NotifyEditorPage() {
   const templateId = searchParams.get('templateId')
   const currentEditor = searchParams.get('editor') || 'email'
 
-  const { syncStatus, triggerSync, autoSyncEnabled, setAutoSyncEnabled } = useTemplateSync()
+  const { syncStatus, triggerSync, autoSyncEnabled, setAutoSyncEnabled } = useTemplateSync(editorId || undefined)
   const statusText =
     syncStatus.status === 'idle'
       ? 'Idle'
@@ -77,41 +100,11 @@ export default function NotifyEditorPage() {
           ? 'text-green-500'
           : 'text-red-500'
 
-  const [template, setTemplate] = useState<NotificationTemplate | null>(null)
-  const [emailContent, setEmailContent] = useState('')
-  const [smsContent, setSmsContent] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [template] = useState<NotificationTemplate | null>(() => getInitialTemplate(templateId))
+  const [emailContent, setEmailContent] = useState(() => getInitialTemplate(templateId)?.email || '')
+  const [smsContent, setSmsContent] = useState(() => getInitialTemplate(templateId)?.sms || '')
   const [zoom, setZoom] = useState(100)
   const [deviceView, setDeviceView] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
-
-  useEffect(() => {
-    if (!templateId) {
-      setLoading(false)
-      return
-    }
-
-    const storedData = localStorage.getItem(`template-${templateId}`)
-    if (storedData) {
-      try {
-        const { expiry, template: storedTemplate } = JSON.parse(storedData)
-
-        if (expiry && Date.now() > expiry) {
-          alert('The template data has expired. Please select the template again from the list.')
-          return
-        }
-
-        setTemplate(storedTemplate)
-        setEmailContent(storedTemplate.email || '')
-        setSmsContent(storedTemplate.sms || '')
-        setLoading(false)
-      } catch (err) {
-        console.error('Failed to parse stored template:', err)
-        setLoading(false)
-      }
-    } else {
-      setLoading(false)
-    }
-  }, [templateId])
 
   const handleBack = () => {
     if (templateId) {
@@ -139,88 +132,45 @@ export default function NotifyEditorPage() {
     setSmsContent(value)
   }, [])
 
-  // Sync email content to localStorage
+  // Debounced localStorage persistence avoids write churn during typing.
   useEffect(() => {
-    if (!template || !templateId || loading) {
+    if (!template || !templateId) {
       return
     }
 
-    const storedData = localStorage.getItem(`template-${templateId}`)
-    if (storedData) {
+    const timeoutId = window.setTimeout(() => {
+      const storedData = localStorage.getItem(`template-${templateId}`)
+      if (!storedData) {
+        return
+      }
+
       try {
         const { expiry, template: storedTemplate, ...rest } = JSON.parse(storedData)
+        if (!storedTemplate) {
+          return
+        }
+
+        if (storedTemplate.email === emailContent && storedTemplate.sms === smsContent) {
+          return
+        }
+
         const updatedData = {
           ...rest,
           expiry,
           template: {
             ...storedTemplate,
             email: emailContent,
-          },
-        }
-        localStorage.setItem(`template-${templateId}`, JSON.stringify(updatedData))
-      } catch (err) {
-        console.error('Failed to sync email to localStorage:', err)
-      }
-    }
-  }, [emailContent, templateId, template, loading])
-
-  // Sync SMS content to localStorage
-  useEffect(() => {
-    if (!template || !templateId || loading) {
-      return
-    }
-
-    const storedData = localStorage.getItem(`template-${templateId}`)
-    if (storedData) {
-      try {
-        const { expiry, template: storedTemplate, ...rest } = JSON.parse(storedData)
-        const updatedData = {
-          ...rest,
-          expiry,
-          template: {
-            ...storedTemplate,
             sms: smsContent,
           },
         }
         localStorage.setItem(`template-${templateId}`, JSON.stringify(updatedData))
       } catch (err) {
-        console.error('Failed to sync SMS to localStorage:', err)
+        console.error('Failed to sync notification template to localStorage:', err)
       }
-    }
-  }, [smsContent, templateId, template, loading])
+    }, 250)
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-muted-foreground">Loading template...</p>
-        </div>
-      </main>
-    )
-  }
-
-  if (!template) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-destructive">Template not found. Please select a template from the list.</p>
-          <Button onClick={handleBack} className="mt-4">
-            Back to Templates
-          </Button>
-        </div>
-      </main>
-    )
-  }
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-muted-foreground">Loading template...</p>
-        </div>
-      </main>
-    )
-  }
+    return () => window.clearTimeout(timeoutId)
+  }, [emailContent, smsContent, templateId, template])
 
   if (!template) {
     return (

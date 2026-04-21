@@ -22,6 +22,53 @@ interface SyncPayload {
     count: number
 }
 
+interface StoredTemplateEnvelope {
+    template?: Record<string, unknown>
+    editorId?: string
+    lastOpened?: number
+}
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
+}
+
+function getStringField(record: Record<string, unknown>, key: string): string | undefined {
+    const value = record[key]
+    if (typeof value !== 'string') {
+        return undefined
+    }
+
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+}
+
+export function getTemplateType(template: unknown): 'docify' | 'notify' {
+    if (!isRecord(template)) {
+        return 'docify'
+    }
+
+    const hasNotifyPayload =
+        (typeof template.email === 'string' && template.email.trim().length > 0) ||
+        (typeof template.sms === 'string' && template.sms.trim().length > 0)
+
+    return hasNotifyPayload ? 'notify' : 'docify'
+}
+
+export function isTemplateEligibleForSync(template: unknown): boolean {
+    if (!isRecord(template)) {
+        return false
+    }
+
+    const type = getTemplateType(template)
+    if (type === 'notify') {
+        return true
+    }
+
+    return typeof template.htmlContent === 'string' && template.htmlContent.trim().length > 0
+}
+
 /**
  * Find all templates in localStorage
  * Returns an array of template data ready for syncing
@@ -45,7 +92,9 @@ export function getAllTemplatesFromStorageForSyncing(): TemplateRef[] {
                 const storedData = localStorage.getItem(key)
 
                 if (storedData) {
-                    const { template, editorId: storedEditorId } = JSON.parse(storedData)
+                    const parsed = JSON.parse(storedData) as StoredTemplateEnvelope
+                    const template = parsed.template
+                    const storedEditorId = parsed.editorId
 
                     if (!template) {
                         continue
@@ -54,27 +103,30 @@ export function getAllTemplatesFromStorageForSyncing(): TemplateRef[] {
                     const templateId = key.replace('template-', '')
 
                     const resolvedName =
-                        template.name ||
-                        template.fileName ||
-                        template.key ||
-                        template.subject ||
+                        getStringField(template, 'name') ||
+                        getStringField(template, 'fileName') ||
+                        getStringField(template, 'key') ||
+                        getStringField(template, 'subject') ||
                         templateId
 
-                    //check if lastOpened is with in the day
+                    // Sync entries opened in the last day only.
                     const now = Date.now()
-                    const oneDay = 24 * 60 * 60 * 1000
-                    if (template.lastOpened && now - template.lastOpened > oneDay) {
+                    const lastOpened =
+                        (isRecord(template) && typeof template.lastOpened === 'number'
+                            ? template.lastOpened
+                            : undefined) ?? parsed.lastOpened
+                    if (typeof lastOpened === 'number' && now - lastOpened > ONE_DAY_MS) {
                         continue
                     }
 
-                    if (!template.htmlContent) {
+                    if (!isTemplateEligibleForSync(template)) {
                         continue
                     }
 
                     templates.push({
                         templateId,
                         name: resolvedName,
-                        editorId: template.editorId || storedEditorId || '',
+                        editorId: getStringField(template, 'editorId') || storedEditorId || '',
                     })
                 }
             } catch (err) {
@@ -119,17 +171,19 @@ export function getTemplateById(templateId: string): TemplateFull | null {
     try {
         const storedData = localStorage.getItem(`template-${templateId}`)
         if (storedData) {
-            const { template, editorId: storedEditorId } = JSON.parse(storedData)
-            let templateType: 'docify' | 'notify' = 'docify'
-            if (template.email || template.sms) {
-                templateType = 'notify'
+            const parsed = JSON.parse(storedData) as StoredTemplateEnvelope
+            const template = parsed.template
+            const storedEditorId = parsed.editorId
+
+            if (!template) {
+                return null
             }
 
             return {
                 templateId,
                 data: template,
-                type: templateType,
-                editorId: template.editorId || storedEditorId || '',
+                type: getTemplateType(template),
+                editorId: getStringField(template, 'editorId') || storedEditorId || '',
             }
         }
     } catch (err) {

@@ -3,14 +3,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import {
-    getAllTemplatesFromStorageForSyncing,
     prepareSyncPayload,
-    getTemplatesByType,
-    getTemplatesNeedingSync,
-    clearSyncedTemplates,
     getTemplateById,
+    isTemplateEligibleForSync,
 } from '@/lib/template-sync-worker'
-import { EDITOR_STORAGE_KEY, useEditorStorage } from './useEditorStorage'
+import { EDITOR_STORAGE_KEY } from './useEditorStorage'
 import { EditorConfig } from '@/lib/editor-types'
 import { updateDocifyTemplate, updateDocifyTemplateVariable, updateNotifyTemplate } from '@/lib/editor-api'
 
@@ -32,12 +29,22 @@ interface UseSyncTemplatesReturn {
     setAutoSyncEnabled: (value: boolean) => void
 }
 
+interface SyncPayload {
+    templates: Array<{
+        templateId: string
+        name: string
+        editorId: string
+    }>
+    timestamp: string
+    count: number
+}
+
 /**
  * Hook for managing template synchronization
  * Finds all templates in localStorage and prepares them for syncing
  */
-export function useTemplateSync(): UseSyncTemplatesReturn {
-   
+export function useTemplateSync(activeEditorId?: string): UseSyncTemplatesReturn {
+
     const autoSyncStorageKey = 'docify-auto-sync-enabled'
     const [syncStatus, setSyncStatus] = useState<SyncStatus>({
         status: 'idle',
@@ -49,6 +56,52 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
     })
     const [autoSyncEnabled, setAutoSyncEnabled] = useState(true)
     const syncInFlightRef = useRef(false)
+
+    const getEditorsFromStorage = useCallback((): EditorConfig[] => {
+        try {
+            return JSON.parse(localStorage.getItem(EDITOR_STORAGE_KEY) || '[]')
+        } catch (err) {
+            console.error('Failed to read editor config from storage:', err)
+            return []
+        }
+    }, [])
+
+    const updateSyncProgress = useCallback((
+        message: string,
+        syncedTemplates: number,
+        totalTemplates: number,
+        status: SyncStatus['status'] = 'syncing',
+        error: string | null = null
+    ) => {
+        const progress =
+            totalTemplates === 0
+                ? 0
+                : Math.min(100, 10 + Math.round((syncedTemplates / totalTemplates) * 90))
+
+        setSyncStatus({
+            status,
+            message,
+            progress,
+            totalTemplates,
+            syncedTemplates,
+            error,
+        })
+    }, [])
+
+    const resolveEditorForTemplate = useCallback(
+        (templateEditorId: string, templateRefEditorId: string, editors: EditorConfig[]): EditorConfig => {
+            const editor = editors.find((candidate) => candidate.id === (templateEditorId || templateRefEditorId))
+            if (!editor) {
+                throw new Error('No editor configuration found for template')
+            }
+            if (!editor.apiUrl || editor.apiUrl.trim().length === 0) {
+                throw new Error(`Editor "${editor.name}" is missing API URL`)
+            }
+
+            return editor
+        },
+        []
+    )
 
     useEffect(() => {
         try {
@@ -69,17 +122,38 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
         }
     }, [autoSyncEnabled])
 
+    const getActiveEditorPayload = useCallback((): SyncPayload => {
+        const payload = prepareSyncPayload() as SyncPayload
+        if (!activeEditorId) {
+            return payload
+        }
+
+        const templates = payload.templates.filter((templateRef) => {
+            if (templateRef.editorId === activeEditorId) {
+                return true
+            }
+
+            const template = getTemplateById(templateRef.templateId)
+            return template?.editorId === activeEditorId
+        })
+
+        return {
+            templates,
+            timestamp: payload.timestamp,
+            count: templates.length,
+        }
+    }, [activeEditorId])
+
     // Get total template count
     const getTemplateCount = useCallback(() => {
-        const templates = getAllTemplatesFromStorageForSyncing()
-        return templates.length
-    }, [])
+        return getActiveEditorPayload().count
+    }, [getActiveEditorPayload])
 
 
     // Get sync payload
     const getSyncPayload = useCallback(() => {
-        return prepareSyncPayload()
-    }, [])
+        return getActiveEditorPayload()
+    }, [getActiveEditorPayload])
 
 
     // Trigger sync
@@ -94,21 +168,30 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
 
         syncInFlightRef.current = true
         let toastId: string | number | undefined
+        let syncedCount = 0
+        let totalCount = 0
         try {
-            // Get all templates ready for sync
-            const payload = prepareSyncPayload()
+            const payload = getActiveEditorPayload()
+            totalCount = payload.count
+            const editors = getEditorsFromStorage()
 
             if (payload.count === 0) {
                 setSyncStatus({
                     status: 'idle',
-                    message: 'No templates to sync',
+                    message: activeEditorId
+                        ? 'No templates to sync for active editor'
+                        : 'No templates to sync',
                     progress: 0,
                     totalTemplates: 0,
                     syncedTemplates: 0,
                     error: null,
                 })
                 if (source === 'manual') {
-                    toast.info('No templates to sync')
+                    toast.info(
+                        activeEditorId
+                            ? 'No templates to sync for active editor'
+                            : 'No templates to sync'
+                    )
                 }
                 return
             }
@@ -120,101 +203,52 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
             setSyncStatus({
                 status: 'syncing',
                 message: 'Preparing templates for sync...',
-                progress: 0,
-                totalTemplates: 0,
+                progress: 10,
+                totalTemplates: payload.count,
                 syncedTemplates: 0,
                 error: null,
             })
 
-            setSyncStatus((prev) => ({
-                ...prev,
-                totalTemplates: payload.count,
-                message: `Found ${payload.count} template(s) to sync`,
-                progress: 25,
-            }))
-
             for (let index = 0; index < payload.count; index++) {
                 const templateRef = payload.templates[index]
-                const editors: EditorConfig[] = JSON.parse(localStorage.getItem(EDITOR_STORAGE_KEY) || '[]')
                 const template = getTemplateById(templateRef.templateId)
-                if (!template) {
-                    continue
-                }
-                if(!(template?.data as any).htmlContent) {    
-                    continue
-                }
-                const editor = editors.find((e) => e.id === (template.editorId || templateRef.editorId))
-                if (!editor) {
-                    continue
-                }
-                setSyncStatus((prev) => ({
-                    ...prev,
-                    syncedTemplates: index + 1,
-                    message: `Prepared ${index + 1} of ${payload.count} template(s)`,
-                    progress: 25 + Math.round(((index + 1) / payload.count) * 50),
-                }))
-                await new Promise((resolve) => setTimeout(resolve, 1000))
-                if (template.type === 'docify') {
-                    try {
-                        await updateDocifyTemplateVariable(template.data, editor)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            syncedTemplates: prev.syncedTemplates + 1,
-                            message: `Prepared ${prev.syncedTemplates} of ${payload.count} template(s)`,
-                            progress: 25 + Math.round((prev.syncedTemplates / payload.count) * 50),
-                        }))
-                    } catch (err) {
-                        console.error(`Failed to prepare docify template ${template.templateId}:`, err)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            message: `Error preparing template ${template.templateId}`,
-                            error: err instanceof Error ? err.message : 'Unknown error',
-                        }))
-                    }
 
-                    try {
-                        
-                        await updateDocifyTemplate(template.data, editor)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            syncedTemplates: prev.syncedTemplates + 1,
-                            message: `Prepared ${prev.syncedTemplates} of ${payload.count} template(s)`,
-                            progress: 25 + Math.round((prev.syncedTemplates / payload.count) * 50),
-                        }))
-                    } catch (err) {
-                        console.error(`Failed to prepare notify template ${template.templateId}:`, err)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            message: `Error preparing template ${template.templateId}`,
-                            error: err instanceof Error ? err.message : 'Unknown error',
-                        }))
-                    }
-                } else if (template.type === 'notify') {
-                    try {
-                        await updateNotifyTemplate(template.data, editor)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            syncedTemplates: prev.syncedTemplates + 1,
-                            message: `Prepared ${prev.syncedTemplates} of ${payload.count} template(s)`,
-                            progress: 75 + Math.round((prev.syncedTemplates / payload.count) * 25),
-                        }))
-                    } catch (err) {
-                        console.error(`Failed to prepare docify template ${template.templateId}:`, err)
-                        setSyncStatus((prev) => ({
-                            ...prev,
-                            message: `Error preparing template ${template.templateId}`,
-                            error: err instanceof Error ? err.message : 'Unknown error',
-                        }))
-                    }
+                if (!template) {
+                    throw new Error(`Template ${templateRef.templateId} was not found in local storage`)
                 }
+
+                if (!isTemplateEligibleForSync(template.data)) {
+                    throw new Error(`Template ${templateRef.templateId} is not eligible for sync`)
+                }
+
+                const editor = resolveEditorForTemplate(template.editorId, templateRef.editorId, editors)
+                updateSyncProgress(
+                    `Syncing ${index + 1} of ${payload.count}: ${templateRef.name}`,
+                    syncedCount,
+                    payload.count
+                )
+
+                if (template.type === 'docify') {
+                    await updateDocifyTemplateVariable(template.data, editor)
+                    await updateDocifyTemplate(template.data, editor)
+                } else if (template.type === 'notify') {
+                    await updateNotifyTemplate(template.data, editor)
+                }
+
+                syncedCount += 1
+                updateSyncProgress(
+                    `Synced ${syncedCount} of ${payload.count} template(s)`,
+                    syncedCount,
+                    payload.count
+                )
             }
 
             setSyncStatus({
                 status: 'success',
-                message: `Ready to sync ${payload.count} template(s)`,
+                message: `Synced ${payload.count} template(s)`,
                 progress: 100,
                 totalTemplates: payload.count,
-                syncedTemplates: payload.count,
+                syncedTemplates: syncedCount,
                 error: null,
             })
             toast.success(`Synced ${payload.count} template(s)`, { id: toastId })
@@ -222,10 +256,10 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
             setSyncStatus({
                 status: 'error',
-                message: 'Failed to prepare templates for sync',
+                message: 'Failed to sync templates',
                 progress: 0,
-                totalTemplates: 0,
-                syncedTemplates: 0,
+                totalTemplates: totalCount,
+                syncedTemplates: syncedCount,
                 error: errorMessage,
             })
             if (toastId) {
@@ -237,7 +271,7 @@ export function useTemplateSync(): UseSyncTemplatesReturn {
         } finally {
             syncInFlightRef.current = false
         }
-    }, [])
+    }, [activeEditorId, getActiveEditorPayload, getEditorsFromStorage, resolveEditorForTemplate, updateSyncProgress])
 
     useEffect(() => {
         if (!autoSyncEnabled) {
