@@ -52,8 +52,8 @@ export default function DocifyEditorPage() {
     const [pageSettings, setPageSettings] = useState<PageSettings>({})
     const [isLoadingTemplate, setIsLoadingTemplate] = useState(true)
     const [isLoadingHtml, setIsLoadingHtml] = useState(false)
-    const [previewMode, setPreviewMode] = useState<'html' | 'pdf'>('html')
-    const [zoom, setZoom] = useState(100)
+    const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
+    const [zoom] = useState(100)
 
     // Load editor configuration from storage
     useEffect(() => {
@@ -105,7 +105,7 @@ export default function DocifyEditorPage() {
         } else {
             document.title = 'Docify Editor'
         }
-    }, [template?.name])
+    }, [template])
 
     useEffect(() => {
         setHtmlContent(initialHtmlContent)
@@ -171,7 +171,7 @@ export default function DocifyEditorPage() {
         }
 
         fetchHtmlContent()
-    }, [template?.id, initialHtmlContent, editor?.apiUrl])
+    }, [template, initialHtmlContent, editor])
 
     const handleBack = () => {
         if (templateId) {
@@ -349,8 +349,7 @@ export default function DocifyEditorPage() {
                     previewMode={previewMode}
                     zoom={zoom}
                     apiUrl={editor?.apiUrl || ''}
-                    templateName={getTemplateName()}
-                    description={template.fileName || template.name || ''}
+                    localPreviewUrl={editor?.localPreviewUrl || ''}
                     sampleData={variablesContent}
                     onPushHtml={handlePushHtml}
                     onSyncMetadata={handleSyncMetadata}

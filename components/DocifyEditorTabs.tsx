@@ -1,4 +1,4 @@
-import { Code, Eye, Settings, Variable } from 'lucide-react'
+import { Code, Settings, Variable } from 'lucide-react'
 import { HtmlEditor } from '@/components/HtmlEditor'
 import { VariableEditor } from '@/components/VariableEditor'
 import { SettingsEditor, type PageSettings } from '@/components/SettingsEditor'
@@ -20,11 +20,10 @@ interface DocifyEditorTabsProps {
     htmlContent: string
     variablesContent: string
     pageSettings: PageSettings
-    previewMode: 'html' | 'pdf'
+    previewMode: 'html' | 'pdf' | 'local'
     zoom: number
     apiUrl: string
-    templateName: string
-    description: string
+    localPreviewUrl: string
     sampleData: string
     onPushHtml: () => void
     onSyncMetadata: () => void
@@ -32,7 +31,7 @@ interface DocifyEditorTabsProps {
     onEditorChange: (value: string) => void
     onHtmlChange: (value: string) => void
     onVariablesChange: (value: string) => void
-    onPreviewModeChange: (mode: 'html' | 'pdf') => void
+    onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
 }
 
 export function DocifyEditorTabs({
@@ -43,8 +42,7 @@ export function DocifyEditorTabs({
     previewMode,
     zoom,
     apiUrl,
-    templateName,
-    description,
+    localPreviewUrl,
     sampleData,
     onPushHtml,
     onSyncMetadata,
@@ -130,8 +128,7 @@ export function DocifyEditorTabs({
                         previewMode={previewMode}
                         onPreviewModeChange={onPreviewModeChange}
                         apiUrl={apiUrl}
-                        templateName={templateName}
-                        description={description}
+                        localPreviewUrl={localPreviewUrl}
                         sampleData={sampleData}
                     />
                 </ResizablePanel>

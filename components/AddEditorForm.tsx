@@ -41,6 +41,7 @@ export function AddEditorForm({
   const [type, setType] = useState<EditorType>(editingEditor?.type || 'notify')
   const [syncMode, setSyncMode] = useState<SyncMode>(editingEditor?.syncMode || 'online')
   const [apiUrl, setApiUrl] = useState(editingEditor?.apiUrl || '')
+  const [localPreviewUrl, setLocalPreviewUrl] = useState(editingEditor?.localPreviewUrl || '')
   const [credentialsType, setCredentialsType] = useState<CredentialsType>(
     editingEditor?.credentialsType || 'header'
   )
@@ -71,6 +72,15 @@ export function AddEditorForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    const isValidUrl = (value: string): boolean => {
+      try {
+        const parsed = new URL(value)
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      } catch {
+        return false
+      }
+    }
+
     if (!name.trim()) {
       toast.error('Editor name is required')
       return
@@ -93,6 +103,16 @@ export function AddEditorForm({
       return
     }
 
+    if (apiUrl.trim() && !isValidUrl(apiUrl.trim())) {
+      toast.error('API URL must be a valid HTTP/HTTPS URL')
+      return
+    }
+
+    if (localPreviewUrl.trim() && !isValidUrl(localPreviewUrl.trim())) {
+      toast.error('Local Preview URL must be a valid HTTP/HTTPS URL')
+      return
+    }
+
     const validCredentials = credentials.filter((c) => c.key.trim())
     const now = new Date().toISOString()
 
@@ -102,6 +122,7 @@ export function AddEditorForm({
       type,
       syncMode,
       apiUrl: apiUrl.trim(),
+      localPreviewUrl: localPreviewUrl.trim(),
       credentialsType,
       credentials: validCredentials,
       createdAt: editingEditor?.createdAt || now,
@@ -178,6 +199,18 @@ export function AddEditorForm({
                 />
               </div>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="local-preview-url">Local Preview URL</Label>
+            <Input
+              id="local-preview-url"
+              type="url"
+              inputMode="url"
+              placeholder="http://localhost:3000"
+              value={localPreviewUrl}
+              onChange={(e) => setLocalPreviewUrl(e.target.value)}
+            />
           </div>
 
           {syncMode === 'online' && (

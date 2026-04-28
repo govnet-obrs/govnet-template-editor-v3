@@ -13,6 +13,7 @@ export interface EditorConfig {
   type: EditorType
   syncMode: SyncMode
   apiUrl: string
+  localPreviewUrl?: string
   credentialsType: CredentialsType
   credentials: Credential[]
   createdAt: string
