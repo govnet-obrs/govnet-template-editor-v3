@@ -13,7 +13,9 @@ services:
       - "9091:8080"
 
   gotenberg:
-    image: gotenberg/gotenberg:8
+    build:
+      context: ./gotenberg
+      dockerfile: Dockerfile
     ports:
       - "3599:3000"
       # Or more secure:

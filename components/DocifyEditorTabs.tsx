@@ -24,6 +24,8 @@ interface DocifyEditorTabsProps {
     zoom: number
     apiUrl: string
     localPreviewUrl: string
+    templateName: string
+    description: string
     sampleData: string
     onPushHtml: () => void
     onSyncMetadata: () => void
@@ -43,6 +45,8 @@ export function DocifyEditorTabs({
     zoom,
     apiUrl,
     localPreviewUrl,
+    templateName,
+    description,
     sampleData,
     onPushHtml,
     onSyncMetadata,
@@ -129,6 +133,8 @@ export function DocifyEditorTabs({
                         onPreviewModeChange={onPreviewModeChange}
                         apiUrl={apiUrl}
                         localPreviewUrl={localPreviewUrl}
+                        templateName={templateName}
+                        description={description}
                         sampleData={sampleData}
                     />
                 </ResizablePanel>

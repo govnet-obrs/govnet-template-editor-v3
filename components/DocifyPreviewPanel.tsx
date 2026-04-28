@@ -11,6 +11,8 @@ interface DocifyPreviewPanelProps {
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
     apiUrl: string
     localPreviewUrl: string
+    templateName: string
+    description: string
     sampleData: string
 }
 
@@ -21,6 +23,8 @@ export function DocifyPreviewPanel({
     onPreviewModeChange,
     apiUrl,
     localPreviewUrl,
+    templateName,
+    description,
     sampleData,
 }: DocifyPreviewPanelProps) {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -115,17 +119,27 @@ export function DocifyPreviewPanel({
                 process.env.DOCUMENT_GENERATOR_API_TOKEN ||
                 ''
 
+            const requestBody = mode === 'pdf'
+                ? {
+                    templateName,
+                    description,
+                    data: dataPayload,
+                    templateContent: htmlContent,
+                    pageSettings,
+                }
+                : {
+                    html: htmlContent,
+                    sampleData: dataPayload,
+                    pageSettings,
+                }
+
             const response = await fetch(`${targetApiUrl}/documents/preview-document`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
-                body: JSON.stringify({
-                    html: htmlContent,
-                    sampleData: dataPayload,
-                    pageSettings,
-                }),
+                body: JSON.stringify(requestBody),
             })
 
             if (!response.ok) {
@@ -158,7 +172,7 @@ export function DocifyPreviewPanel({
                 setIsGeneratingLocalPdf(false)
             }
         }
-    }, [apiUrl, localPreviewUrl, htmlContent, pageSettings, isGeneratingPdf, isGeneratingLocalPdf, parseSampleData, getResponseError, revokePdfUrl])
+    }, [apiUrl, localPreviewUrl, templateName, description, htmlContent, pageSettings, isGeneratingPdf, isGeneratingLocalPdf, parseSampleData, getResponseError, revokePdfUrl])
 
     const handleGeneratePdf = useCallback(async () => {
         await generatePdfForMode('pdf')

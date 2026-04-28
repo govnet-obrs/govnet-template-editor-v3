@@ -350,6 +350,8 @@ export default function DocifyEditorPage() {
                     zoom={zoom}
                     apiUrl={editor?.apiUrl || ''}
                     localPreviewUrl={editor?.localPreviewUrl || ''}
+                    templateName={getTemplateName()}
+                    description={template.fileName || template.name || ''}
                     sampleData={variablesContent}
                     onPushHtml={handlePushHtml}
                     onSyncMetadata={handleSyncMetadata}
