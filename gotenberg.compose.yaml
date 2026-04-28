@@ -1,5 +1,16 @@
 services:
-  # Your other services.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      - gotenberg
+    environment:
+      PORT: "8080"
+      GOTENBERG_URL: http://gotenberg:3000
+      ALLOWED_ORIGINS: http://localhost:9090
+    ports:
+      - "9091:8080"
 
   gotenberg:
     image: gotenberg/gotenberg:8
