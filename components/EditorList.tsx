@@ -80,7 +80,7 @@ export function EditorList({
                   <AlertDialogContent>
                     <AlertDialogTitle>Delete Editor</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to delete "{editor.name}"? This
+                      Are you sure you want to delete &quot;{editor.name}&quot;? This
                       action cannot be undone.
                     </AlertDialogDescription>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>

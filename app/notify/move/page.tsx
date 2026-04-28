@@ -230,10 +230,10 @@ export default function NotifyMovePage() {
             key: template.key || existingTarget.key,
             subject: template.subject || existingTarget.subject,
           }
-          await updateNotifyTemplate(targetPayload, targetEditor)
+          await updateNotifyTemplate(targetPayload as unknown as Record<string, unknown>, targetEditor)
           toast.success(`Updated: ${template.subject || template.key}`)
         } else {
-          await createNotifyTemplate(template, targetEditor)
+          await createNotifyTemplate(template as unknown as Record<string, unknown>, targetEditor)
           toast.success(`Created: ${template.subject || template.key}`)
         }
       }

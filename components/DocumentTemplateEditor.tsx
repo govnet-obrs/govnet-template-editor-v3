@@ -33,6 +33,15 @@ export function DocumentTemplateEditor({ config }: DocumentTemplateEditorProps) 
   const { config: defaultConfig, updateConfig, saveTemplate, loading, error } =
     useTemplateApi('document')
   const editorConfig = config || defaultConfig
+  const isEditorConfig = 'apiUrl' in editorConfig
+  const initialApiUrl = isEditorConfig ? editorConfig.apiUrl : editorConfig.url
+  const initialAuthType: 'none' | 'bearer' = isEditorConfig
+    ? 'none'
+    : editorConfig.auth?.type === 'bearer'
+      ? 'bearer'
+      : 'none'
+  const initialAuthToken = isEditorConfig ? '' : editorConfig.auth?.token || ''
+
   const [template, setTemplate] = useState<Template>({
     id: '',
     name: 'New Document Template',
@@ -40,11 +49,9 @@ export function DocumentTemplateEditor({ config }: DocumentTemplateEditorProps) 
     content: '',
     lastModified: new Date(),
   })
-  const [apiUrl, setApiUrl] = useState(editorConfig.url)
-  const [authType, setAuthType] = useState<'none' | 'bearer'>(
-    editorConfig.auth?.type === 'bearer' ? 'bearer' : 'none'
-  )
-  const [authToken, setAuthToken] = useState(editorConfig.auth?.token || '')
+  const [apiUrl, setApiUrl] = useState(initialApiUrl)
+  const [authType, setAuthType] = useState<'none' | 'bearer'>(initialAuthType)
+  const [authToken, setAuthToken] = useState(initialAuthToken)
 
   const handleApiConfigChange = () => {
     updateConfig({
@@ -158,7 +165,7 @@ export function DocumentTemplateEditor({ config }: DocumentTemplateEditorProps) 
               {loading ? 'Saving...' : 'Save Template'}
             </Button>
             <AlertDialog>
-              <AlertDialogTrigger asChild>
+              <AlertDialogTrigger>
                 <Button variant="destructive">Clear</Button>
               </AlertDialogTrigger>
               <AlertDialogContent>

@@ -40,8 +40,11 @@ export function NotificationTemplateEditor({ config }: NotificationTemplateEdito
     lastModified: new Date(),
   })
   const editorConfig = config || defaultConfig
-  const [apiUrl, setApiUrl] = useState(editorConfig.url)
-  const [apiKey, setApiKey] = useState(editorConfig.auth?.token || '')
+  const isEditorConfig = 'apiUrl' in editorConfig
+  const initialApiUrl = isEditorConfig ? editorConfig.apiUrl : editorConfig.url
+  const initialApiKey = isEditorConfig ? '' : editorConfig.auth?.token || ''
+  const [apiUrl, setApiUrl] = useState(initialApiUrl)
+  const [apiKey, setApiKey] = useState(initialApiKey)
 
   const handleApiConfigChange = () => {
     updateConfig({
@@ -139,7 +142,7 @@ export function NotificationTemplateEditor({ config }: NotificationTemplateEdito
               {loading ? 'Saving...' : 'Save Template'}
             </Button>
             <AlertDialog>
-              <AlertDialogTrigger asChild>
+              <AlertDialogTrigger>
                 <Button variant="destructive">Clear</Button>
               </AlertDialogTrigger>
               <AlertDialogContent>

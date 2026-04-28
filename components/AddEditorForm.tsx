@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,37 +37,18 @@ export function AddEditorForm({
 }: AddEditorFormProps) {
   const isEditMode = Boolean(editingEditor)
 
-  const [name, setName] = useState('')
-  const [type, setType] = useState<EditorType>('notify')
-  const [syncMode, setSyncMode] = useState<SyncMode>('online')
-  const [apiUrl, setApiUrl] = useState('')
-  const [credentialsType, setCredentialsType] = useState<CredentialsType>('header')
-  const [credentials, setCredentials] = useState<Array<{ key: string; value: string }>>([
-    { key: '', value: '' },
-  ])
-
-  useEffect(() => {
-    if (!editingEditor) {
-      setName('')
-      setType('notify')
-      setSyncMode('online')
-      setApiUrl('')
-      setCredentialsType('header')
-      setCredentials([{ key: '', value: '' }])
-      return
-    }
-
-    setName(editingEditor.name)
-    setType(editingEditor.type)
-    setSyncMode(editingEditor.syncMode)
-    setApiUrl(editingEditor.apiUrl || '')
-    setCredentialsType(editingEditor.credentialsType)
-    setCredentials(
-      editingEditor.credentials.length > 0
-        ? editingEditor.credentials
-        : [{ key: '', value: '' }]
-    )
-  }, [editingEditor])
+  const [name, setName] = useState(editingEditor?.name || '')
+  const [type, setType] = useState<EditorType>(editingEditor?.type || 'notify')
+  const [syncMode, setSyncMode] = useState<SyncMode>(editingEditor?.syncMode || 'online')
+  const [apiUrl, setApiUrl] = useState(editingEditor?.apiUrl || '')
+  const [credentialsType, setCredentialsType] = useState<CredentialsType>(
+    editingEditor?.credentialsType || 'header'
+  )
+  const [credentials, setCredentials] = useState<Array<{ key: string; value: string }>>(
+    editingEditor?.credentials.length
+      ? editingEditor.credentials
+      : [{ key: '', value: '' }]
+  )
 
   const handleAddCredential = () => {
     setCredentials([...credentials, { key: '', value: '' }])

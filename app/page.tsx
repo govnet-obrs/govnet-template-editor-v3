@@ -86,6 +86,7 @@ export default function Page() {
               </DialogTitle>
             </DialogHeader>
             <AddEditorForm
+              key={editingEditor?.id || "new-editor"}
               existingEditors={editors}
               editingEditor={editingEditor}
               onSave={(editor) => {

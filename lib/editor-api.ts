@@ -217,7 +217,7 @@ export function createDocifyTemplate(template: TemplateInput, editor: EditorConf
             )
             formData.append('sampleJsonData', getStringValue(template.sampleJsonData, JSON.stringify({})))
 
-            const url = appendQueryCredentials(`${editor.apiUrl}templates`, editor)
+            const url = appendQueryCredentials(`${editor.apiUrl}/templates`, editor)
 
             const response = await fetchWithTimeout(url, {
                 method: 'POST',
