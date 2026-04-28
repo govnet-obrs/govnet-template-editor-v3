@@ -1,10 +1,14 @@
 COMPOSE_FILE := gotenberg.compose.yaml
 COMPOSE := docker compose -f $(COMPOSE_FILE)
 
-.PHONY: up down logs ps restart build rebuild-gotenberg
+.PHONY: up up-fresh down logs ps restart build rebuild-gotenberg
 
 up:
 	$(COMPOSE) up -d --build
+
+up-fresh:
+	$(COMPOSE) build --pull --no-cache
+	$(COMPOSE) up -d --force-recreate
 
 down:
 	$(COMPOSE) down
