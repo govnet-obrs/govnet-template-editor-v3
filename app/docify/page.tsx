@@ -68,7 +68,7 @@ interface TemplatesResponse {
   data?: PdfTemplate[]
 }
 
-const ITEMS_PER_PAGE_OPTIONS = [6, 12, 24, 48, 96, 192]
+const ITEMS_PER_PAGE_OPTIONS = [24, 48, 96, 192]
 
 export default function DocifyPage() {
   const router = useRouter()
