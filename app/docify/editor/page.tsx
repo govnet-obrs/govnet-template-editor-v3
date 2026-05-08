@@ -12,6 +12,7 @@ import { updateDocifyTemplate, updateDocifyTemplateVariable } from '@/lib/editor
 import { decodeBase64Utf8 } from '@/lib/base64'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
+import { DEFAULT_PREVIEW_ENDPOINTS } from '@/lib/editor-types'
 import type { PageSettings } from '@/components/SettingsEditor'
 
 interface PdfTemplate {
@@ -54,6 +55,9 @@ export default function DocifyEditorPage() {
     const [isLoadingHtml, setIsLoadingHtml] = useState(false)
     const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
     const [zoom] = useState(100)
+    const [selectedPreviewEndpoint, setSelectedPreviewEndpoint] = useState<string>(
+        DEFAULT_PREVIEW_ENDPOINTS[0]
+    )
 
     // Load editor configuration from storage
     useEffect(() => {
@@ -61,6 +65,11 @@ export default function DocifyEditorPage() {
             const editorConfig = getEditor(editorId)
             if (editorConfig) {
                 setEditor(editorConfig)
+                // Reset selected endpoint to first available when editor config loads/changes
+                const endpoints = editorConfig.previewEndpoints?.length
+                    ? editorConfig.previewEndpoints
+                    : DEFAULT_PREVIEW_ENDPOINTS
+                setSelectedPreviewEndpoint(endpoints[0])
             }
         }
     }, [editorStorageLoaded, editorId, getEditor])
@@ -280,31 +289,6 @@ export default function DocifyEditorPage() {
         }
     }, [htmlContent, variablesContent, pageSettings, templateId, template, isLoadingTemplate, isLoadingHtml])
 
-    // Sync variables content to localStorage
-    useEffect(() => {
-        if (!template || !templateId || isLoadingTemplate) {
-            return
-        }
-
-        const storedData = localStorage.getItem(`template-${templateId}`)
-        if (storedData) {
-            try {
-                const { expiry, template: storedTemplate, ...rest } = JSON.parse(storedData)
-                const updatedData = {
-                    ...rest,
-                    expiry,
-                    template: {
-                        ...storedTemplate,
-                        sampleJsonData: variablesContent,
-                    },
-                }
-                localStorage.setItem(`template-${templateId}`, JSON.stringify(updatedData))
-            } catch (err) {
-                console.error('Failed to sync variables to localStorage:', err)
-            }
-        }
-    }, [variablesContent, templateId, template, isLoadingTemplate])
-
     if (isLoadingTemplate || isLoadingHtml) {
         return (
             <main className="min-h-screen bg-background">
@@ -350,6 +334,9 @@ export default function DocifyEditorPage() {
                     zoom={zoom}
                     apiUrl={editor?.apiUrl || ''}
                     localPreviewUrl={editor?.localPreviewUrl || ''}
+                    previewEndpoints={editor?.previewEndpoints?.length ? editor.previewEndpoints : DEFAULT_PREVIEW_ENDPOINTS}
+                    selectedPreviewEndpoint={selectedPreviewEndpoint}
+                    onPreviewEndpointChange={setSelectedPreviewEndpoint}
                     templateName={getTemplateName()}
                     description={template.fileName || template.name || ''}
                     sampleData={variablesContent}

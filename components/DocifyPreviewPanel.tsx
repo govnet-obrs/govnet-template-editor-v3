@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import type { PageSettings } from '@/components/SettingsEditor'
 
 interface DocifyPreviewPanelProps {
@@ -11,6 +18,9 @@ interface DocifyPreviewPanelProps {
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
     apiUrl: string
     localPreviewUrl: string
+    previewEndpoints: string[]
+    selectedPreviewEndpoint: string
+    onPreviewEndpointChange: (endpoint: string) => void
     templateName: string
     description: string
     sampleData: string
@@ -23,6 +33,9 @@ export function DocifyPreviewPanel({
     onPreviewModeChange,
     apiUrl,
     localPreviewUrl,
+    previewEndpoints,
+    selectedPreviewEndpoint,
+    onPreviewEndpointChange,
     templateName,
     description,
     sampleData,
@@ -35,6 +48,7 @@ export function DocifyPreviewPanel({
     const [isGeneratingLocalPdf, setIsGeneratingLocalPdf] = useState(false)
     const lastPdfUrlRef = useRef<string | null>(null)
     const lastLocalPdfUrlRef = useRef<string | null>(null)
+    const isGeneratingRef = useRef({ pdf: false, local: false })
     const hasLocalPreview = Boolean(localPreviewUrl?.trim())
 
     const revokePdfUrl = useCallback((url: string | null) => {
@@ -69,9 +83,9 @@ export function DocifyPreviewPanel({
         return `Failed to generate PDF (${response.status})`
     }, [])
 
-    const generatePdfForMode = useCallback(async (mode: 'pdf' | 'local') => {
-        if (mode === 'pdf' && isGeneratingPdf) return
-        if (mode === 'local' && isGeneratingLocalPdf) return
+    const generatePdfForMode = useCallback(async (mode: 'pdf' | 'local', endpointOverride?: string) => {
+        if (mode === 'pdf' && isGeneratingRef.current.pdf) return
+        if (mode === 'local' && isGeneratingRef.current.local) return
 
         const targetApiUrl = mode === 'pdf' ? apiUrl : localPreviewUrl
         if (!targetApiUrl) {
@@ -106,9 +120,11 @@ export function DocifyPreviewPanel({
         }
 
         if (mode === 'pdf') {
+            isGeneratingRef.current.pdf = true
             setIsGeneratingPdf(true)
             setPdfError(null)
         } else {
+            isGeneratingRef.current.local = true
             setIsGeneratingLocalPdf(true)
             setLocalPdfError(null)
         }
@@ -133,7 +149,7 @@ export function DocifyPreviewPanel({
                     pageSettings,
                 }
 
-            const response = await fetch(`${targetApiUrl}/documents/preview-document`, {
+            const response = await fetch(`${targetApiUrl}${mode === 'pdf' ? (endpointOverride ?? selectedPreviewEndpoint) : '/documents/preview-document'}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -167,12 +183,14 @@ export function DocifyPreviewPanel({
             }
         } finally {
             if (mode === 'pdf') {
+                isGeneratingRef.current.pdf = false
                 setIsGeneratingPdf(false)
             } else {
+                isGeneratingRef.current.local = false
                 setIsGeneratingLocalPdf(false)
             }
         }
-    }, [apiUrl, localPreviewUrl, templateName, description, htmlContent, pageSettings, isGeneratingPdf, isGeneratingLocalPdf, parseSampleData, getResponseError, revokePdfUrl])
+    }, [apiUrl, localPreviewUrl, selectedPreviewEndpoint, templateName, description, htmlContent, pageSettings, parseSampleData, getResponseError, revokePdfUrl])
 
     const handleGeneratePdf = useCallback(async () => {
         await generatePdfForMode('pdf')
@@ -226,14 +244,37 @@ export function DocifyPreviewPanel({
                         </Button>
                     )}
                     {previewMode === 'pdf' && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void handleGeneratePdf()}
-                            disabled={isGeneratingPdf}
-                        >
-                            Refresh
-                        </Button>
+                        <>
+                            {previewEndpoints.length > 1 && (
+                                <Select
+                                    value={selectedPreviewEndpoint}
+                                    onValueChange={(endpoint) => {
+                                        if (!endpoint) return
+                                        onPreviewEndpointChange(endpoint)
+                                        void generatePdfForMode('pdf', endpoint)
+                                    }}
+                                >
+                                    <SelectTrigger className="h-8 text-xs w-28">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {previewEndpoints.map((ep, i) => (
+                                            <SelectItem key={ep} value={ep}>
+                                                v{i + 1}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleGeneratePdf()}
+                                disabled={isGeneratingPdf}
+                            >
+                                Refresh
+                            </Button>
+                        </>
                     )}
                     {previewMode === 'local' && (
                         <Button

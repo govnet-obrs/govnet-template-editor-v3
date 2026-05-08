@@ -22,22 +22,26 @@ export function useEditorStorage() {
   }, [])
 
   const saveEditor = (editor: EditorConfig) => {
-    setEditors((prev) => {
-      const existing = prev.find((e) => e.id === editor.id)
-      const updated = existing
-        ? prev.map((e) => (e.id === editor.id ? editor : e))
-        : [...prev, editor]
+    const existing = editors.find((e) => e.id === editor.id)
+    const updated = existing
+      ? editors.map((e) => (e.id === editor.id ? editor : e))
+      : [...editors, editor]
+    try {
       localStorage.setItem(EDITOR_STORAGE_KEY, JSON.stringify(updated))
-      return updated
-    })
+    } catch (err) {
+      console.error('Failed to persist editor to storage:', err)
+    }
+    setEditors(updated)
   }
 
   const deleteEditor = (editorId: string) => {
-    setEditors((prev) => {
-      const updated = prev.filter((e) => e.id !== editorId)
+    const updated = editors.filter((e) => e.id !== editorId)
+    try {
       localStorage.setItem(EDITOR_STORAGE_KEY, JSON.stringify(updated))
-      return updated
-    })
+    } catch (err) {
+      console.error('Failed to persist editor deletion to storage:', err)
+    }
+    setEditors(updated)
   }
 
   const getEditor = (editorId: string) => {

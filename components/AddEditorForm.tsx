@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Card,
   CardContent,
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Plus, Trash2 } from 'lucide-react'
 import type { EditorConfig, EditorType, SyncMode, CredentialsType } from '@/lib/editor-types'
+import { DEFAULT_PREVIEW_ENDPOINTS } from '@/lib/editor-types'
 import { toast } from 'sonner'
 
 interface AddEditorFormProps {
@@ -50,6 +52,30 @@ export function AddEditorForm({
       ? editingEditor.credentials
       : [{ key: '', value: '' }]
   )
+  const [previewEndpointsJson, setPreviewEndpointsJson] = useState(
+    editingEditor?.previewEndpoints
+      ? JSON.stringify(editingEditor.previewEndpoints, null, 2)
+      : JSON.stringify(DEFAULT_PREVIEW_ENDPOINTS, null, 2)
+  )
+
+  useEffect(() => {
+    setName(editingEditor?.name || '')
+    setType(editingEditor?.type || 'notify')
+    setSyncMode(editingEditor?.syncMode || 'online')
+    setApiUrl(editingEditor?.apiUrl || '')
+    setLocalPreviewUrl(editingEditor?.localPreviewUrl || '')
+    setCredentialsType(editingEditor?.credentialsType || 'header')
+    setCredentials(
+      editingEditor?.credentials.length
+        ? editingEditor.credentials
+        : [{ key: '', value: '' }]
+    )
+    setPreviewEndpointsJson(
+      editingEditor?.previewEndpoints
+        ? JSON.stringify(editingEditor.previewEndpoints, null, 2)
+        : JSON.stringify(DEFAULT_PREVIEW_ENDPOINTS, null, 2)
+    )
+  }, [editingEditor?.id])
 
   const handleAddCredential = () => {
     setCredentials([...credentials, { key: '', value: '' }])
@@ -113,6 +139,29 @@ export function AddEditorForm({
       return
     }
 
+    let resolvedPreviewEndpoints: string[] = DEFAULT_PREVIEW_ENDPOINTS
+    if (type === 'docify') {
+      const rawJson = previewEndpointsJson.trim()
+      if (rawJson) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(rawJson)
+        } catch {
+          toast.error('Preview Endpoints must be valid JSON (e.g. ["/documents/preview-document"])')
+          return
+        }
+        if (
+          !Array.isArray(parsed) ||
+          parsed.length === 0 ||
+          !parsed.every((v) => typeof v === 'string' && v.trim().startsWith('/'))
+        ) {
+          toast.error('Preview Endpoints must be a non-empty JSON array of paths starting with /')
+          return
+        }
+        resolvedPreviewEndpoints = (parsed as string[]).map((v) => v.trim())
+      }
+    }
+
     const validCredentials = credentials.filter((c) => c.key.trim())
     const now = new Date().toISOString()
 
@@ -123,6 +172,7 @@ export function AddEditorForm({
       syncMode,
       apiUrl: apiUrl.trim(),
       localPreviewUrl: localPreviewUrl.trim(),
+      ...(type === 'docify' ? { previewEndpoints: resolvedPreviewEndpoints } : {}),
       credentialsType,
       credentials: validCredentials,
       createdAt: editingEditor?.createdAt || now,
@@ -212,6 +262,22 @@ export function AddEditorForm({
               onChange={(e) => setLocalPreviewUrl(e.target.value)}
             />
           </div>
+
+          {type === 'docify' && (
+            <div className="space-y-2">
+              <Label htmlFor="preview-endpoints">PDF Preview Endpoints</Label>
+              <p className="text-xs text-muted-foreground">
+                JSON array of relative endpoint paths in order (v1, v2, …). Each path must start with <code>/</code>.
+              </p>
+              <Textarea
+                id="preview-endpoints"
+                className="font-mono text-xs min-h-[80px]"
+                placeholder='["/documents/preview-document"]'
+                value={previewEndpointsJson}
+                onChange={(e) => setPreviewEndpointsJson(e.target.value)}
+              />
+            </div>
+          )}
 
           {syncMode === 'online' && (
             <>

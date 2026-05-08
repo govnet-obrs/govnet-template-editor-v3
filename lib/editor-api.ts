@@ -84,89 +84,84 @@ const getTemplateId = (template: TemplateInput): string => {
     return String(templateId)
 }
 
-export function updateDocifyTemplateVariable(template: TemplateInput, editor: EditorConfig) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (!editor.apiUrl) {
-                throw new Error('Missing API URL for editor')
-            }
-            const templateId = getTemplateId(template)
-           
-            const jsonFormData = new FormData()
-            jsonFormData.append("templateId", templateId)
-            jsonFormData.append("name", getStringValue(template.name))
-            jsonFormData.append("pageSettings", JSON.stringify(template.pageSettings || {}))
-            jsonFormData.append("sampleJsonData", getStringValue(template.sampleJsonData))
-            jsonFormData.append("folderName", getStringValue(template.folderName))
-            jsonFormData.append("tags", JSON.stringify(template.tags || []))
-
-            const headers = buildAuthHeaders(editor)
-            const url = appendQueryCredentials(`${editor.apiUrl}/templates/edit-page-settings/${templateId}`, editor)
-
-            const response = await fetchWithTimeout(url, {
-                method: "PUT",
-                body: jsonFormData,
-                headers,
-            })
-
-            if (!response.ok) {
-                throw new Error(`Failed to update template ${templateId}: ${response.status} ${response.statusText}`)
-            }
-
-            resolve(true)
-        } catch (err) {
-            const error = asError('Failed to update docify template metadata', err)
-            console.error(error.message)
-            reject(error)
+export async function updateDocifyTemplateVariable(template: TemplateInput, editor: EditorConfig) {
+    try {
+        if (!editor.apiUrl) {
+            throw new Error('Missing API URL for editor')
         }
-    })
+        const templateId = getTemplateId(template)
+
+        const jsonFormData = new FormData()
+        jsonFormData.append("templateId", templateId)
+        jsonFormData.append("name", getStringValue(template.name))
+        jsonFormData.append("pageSettings", JSON.stringify(template.pageSettings || {}))
+        jsonFormData.append("sampleJsonData", getStringValue(template.sampleJsonData))
+        jsonFormData.append("folderName", getStringValue(template.folderName))
+        jsonFormData.append("tags", JSON.stringify(template.tags || []))
+
+        const headers = buildAuthHeaders(editor)
+        const url = appendQueryCredentials(`${editor.apiUrl}/templates/edit-page-settings/${templateId}`, editor)
+
+        const response = await fetchWithTimeout(url, {
+            method: "PUT",
+            body: jsonFormData,
+            headers,
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to update template ${templateId}: ${response.status} ${response.statusText}`)
+        }
+
+        return true
+    } catch (err) {
+        const error = asError('Failed to update docify template metadata', err)
+        console.error(error.message)
+        throw error
+    }
 }
 
-export function updateDocifyTemplate(template: TemplateInput, editor: EditorConfig) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (!editor.apiUrl) {
-                throw new Error('Missing API URL for editor')
-            }
-            const templateId = getTemplateId(template)
-
-            const headers = buildAuthHeaders(editor)
-
-            const htmlContent = getStringValue(template.htmlContent)
-            const name = getStringValue(template.name, `template-${templateId}`)
-
-            const formData = new FormData()
-            const htmlBlob = new Blob([htmlContent], { type: "text/html" })
-            formData.append("file", htmlBlob, `${name.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}.html`)
-            formData.append("templateId", templateId)
-
-            const url = appendQueryCredentials(`${editor.apiUrl}/templates/${templateId}`, editor)
-
-            const response = await fetchWithTimeout(url, {
-                method: "PUT",
-                body: formData,
-                headers,
-            })
-
-            if (!response.ok) {
-                throw new Error(`Failed to update HTML content for template ${templateId}: ${response.status} ${response.statusText}`)
-            }
-
-            resolve(true)
-        } catch (err) {
-            const error = asError('Failed to update docify template HTML', err)
-            console.error(error.message)
-            reject(error)
+export async function updateDocifyTemplate(template: TemplateInput, editor: EditorConfig) {
+    try {
+        if (!editor.apiUrl) {
+            throw new Error('Missing API URL for editor')
         }
-    })
+        const templateId = getTemplateId(template)
+
+        const headers = buildAuthHeaders(editor)
+
+        const htmlContent = getStringValue(template.htmlContent)
+        const name = getStringValue(template.name, `template-${templateId}`)
+
+        const formData = new FormData()
+        const htmlBlob = new Blob([htmlContent], { type: "text/html" })
+        formData.append("file", htmlBlob, `${name.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}.html`)
+        formData.append("templateId", templateId)
+
+        const url = appendQueryCredentials(`${editor.apiUrl}/templates/${templateId}`, editor)
+
+        const response = await fetchWithTimeout(url, {
+            method: "PUT",
+            body: formData,
+            headers,
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to update HTML content for template ${templateId}: ${response.status} ${response.statusText}`)
+        }
+
+        return true
+    } catch (err) {
+        const error = asError('Failed to update docify template HTML', err)
+        console.error(error.message)
+        throw error
+    }
 }
 
-export function createDocifyTemplate(template: TemplateInput, editor: EditorConfig) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (!editor.apiUrl) {
-                throw new Error('Missing API URL for editor')
-            }
+export async function createDocifyTemplate(template: TemplateInput, editor: EditorConfig) {
+    try {
+        if (!editor.apiUrl) {
+            throw new Error('Missing API URL for editor')
+        }
 
             const headers = buildAuthHeaders(editor)
 
@@ -217,24 +212,24 @@ export function createDocifyTemplate(template: TemplateInput, editor: EditorConf
             )
             formData.append('sampleJsonData', getStringValue(template.sampleJsonData, JSON.stringify({})))
 
-            const url = appendQueryCredentials(`${editor.apiUrl}/templates`, editor)
+        const url = appendQueryCredentials(`${editor.apiUrl}/templates`, editor)
 
-            const response = await fetchWithTimeout(url, {
-                method: 'POST',
-                headers,
-                body: formData,
-            })
+        const response = await fetchWithTimeout(url, {
+            method: 'POST',
+            headers,
+            body: formData,
+        })
 
-            if (!response.ok) {
-                throw new Error(`Failed to create template: ${response.statusText}`)
-            }
-
-            resolve(true)
-        } catch (err) {
-            console.error('Failed to create docify template:', err)
-            reject(err)
+        if (!response.ok) {
+            throw new Error(`Failed to create template: ${response.statusText}`)
         }
-    })
+
+        return true
+    } catch (err) {
+        const error = asError('Failed to create docify template', err)
+        console.error(error.message)
+        throw error
+    }
 }
 
 export interface EmailTemplatePayload {
@@ -249,90 +244,87 @@ export interface EmailTemplatePayload {
 }
 
 
-export function updateNotifyTemplate(template: TemplateInput, editor: EditorConfig) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (!editor.apiUrl) {
-                throw new Error('Missing API URL for editor')
-            }
-            const templateId = getTemplateId(template)
-
-            const headers = buildAuthHeaders(editor)
-
-            const payload: EmailTemplatePayload = {
-                key: getStringValue(template.key),
-                sender: getStringValue(template.sender),
-                subject: getStringValue(template.subject),
-                email: getStringValue(template.email),
-                sms: getStringValue(template.sms),
-                cc: getStringArray(template.cc),
-                bcc: getStringArray(template.bcc),
-                data: getRecord(template.data) as Record<string, string> || {},
-            }
-
-            const url = appendQueryCredentials(`${editor.apiUrl}/templates/${templateId}`, editor)
-
-            const response = await fetchWithTimeout(url, {
-                method: "PUT",
-                body: JSON.stringify(payload),
-                headers: {
-                    "Content-Type": "application/json",
-                    ...headers,
-                },
-            })
-
-            if (!response.ok) {
-                throw new Error(`Failed to update notify template ${templateId}: ${response.status} ${response.statusText}`)
-            }
-
-            resolve(true)
-        } catch (err) {
-            const error = asError('Failed to update notify template', err)
-            console.error(error.message)
-            reject(error)
+export async function updateNotifyTemplate(template: TemplateInput, editor: EditorConfig) {
+    try {
+        if (!editor.apiUrl) {
+            throw new Error('Missing API URL for editor')
         }
-    })
+        const templateId = getTemplateId(template)
+
+        const headers = buildAuthHeaders(editor)
+
+        const payload: EmailTemplatePayload = {
+            key: getStringValue(template.key),
+            sender: getStringValue(template.sender),
+            subject: getStringValue(template.subject),
+            email: getStringValue(template.email),
+            sms: getStringValue(template.sms),
+            cc: getStringArray(template.cc),
+            bcc: getStringArray(template.bcc),
+            data: getRecord(template.data) as Record<string, string> || {},
+        }
+
+        const url = appendQueryCredentials(`${editor.apiUrl}/templates/${templateId}`, editor)
+
+        const response = await fetchWithTimeout(url, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+            headers: {
+                "Content-Type": "application/json",
+                ...headers,
+            },
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to update notify template ${templateId}: ${response.status} ${response.statusText}`)
+        }
+
+        return true
+    } catch (err) {
+        const error = asError('Failed to update notify template', err)
+        console.error(error.message)
+        throw error
+    }
 }
 
-export function createNotifyTemplate(template: TemplateInput, editor: EditorConfig) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            if (!editor.apiUrl) {
-                throw new Error('Missing API URL for editor')
-            }
-
-            const headers = buildAuthHeaders(editor)
-
-            const payload: EmailTemplatePayload = {
-                key: getStringValue(template.key) || getStringValue(template.subject),
-                sender: getStringValue(template.sender),
-                subject: getStringValue(template.subject) || getStringValue(template.key),
-                email: getStringValue(template.email),
-                sms: getStringValue(template.sms),
-                cc: getStringArray(template.cc),
-                bcc: getStringArray(template.bcc),
-                data: getRecord(template.data) as Record<string, string> || {},
-            }
-
-            const url = appendQueryCredentials(`${editor.apiUrl}/templates`, editor)
-
-            const response = await fetchWithTimeout(url, {
-                method: 'POST',
-                body: JSON.stringify(payload),
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...headers,
-                },
-            })
-
-            if (!response.ok) {
-                throw new Error(`Failed to create notify template: ${response.statusText}`)
-            }
-
-            resolve(true)
-        } catch (err) {
-            console.error('Failed to create notify template:', err)
-            reject(err)
+export async function createNotifyTemplate(template: TemplateInput, editor: EditorConfig) {
+    try {
+        if (!editor.apiUrl) {
+            throw new Error('Missing API URL for editor')
         }
-    })
+
+        const headers = buildAuthHeaders(editor)
+
+        const payload: EmailTemplatePayload = {
+            key: getStringValue(template.key) || getStringValue(template.subject),
+            sender: getStringValue(template.sender),
+            subject: getStringValue(template.subject) || getStringValue(template.key),
+            email: getStringValue(template.email),
+            sms: getStringValue(template.sms),
+            cc: getStringArray(template.cc),
+            bcc: getStringArray(template.bcc),
+            data: getRecord(template.data) as Record<string, string> || {},
+        }
+
+        const url = appendQueryCredentials(`${editor.apiUrl}/templates`, editor)
+
+        const response = await fetchWithTimeout(url, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers,
+            },
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to create notify template: ${response.statusText}`)
+        }
+
+        return true
+    } catch (err) {
+        const error = asError('Failed to create notify template', err)
+        console.error(error.message)
+        throw error
+    }
 }

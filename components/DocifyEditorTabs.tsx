@@ -24,6 +24,8 @@ interface DocifyEditorTabsProps {
     zoom: number
     apiUrl: string
     localPreviewUrl: string
+    previewEndpoints: string[]
+    selectedPreviewEndpoint: string
     templateName: string
     description: string
     sampleData: string
@@ -34,6 +36,7 @@ interface DocifyEditorTabsProps {
     onHtmlChange: (value: string) => void
     onVariablesChange: (value: string) => void
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
+    onPreviewEndpointChange: (endpoint: string) => void
 }
 
 export function DocifyEditorTabs({
@@ -45,6 +48,8 @@ export function DocifyEditorTabs({
     zoom,
     apiUrl,
     localPreviewUrl,
+    previewEndpoints,
+    selectedPreviewEndpoint,
     templateName,
     description,
     sampleData,
@@ -55,6 +60,7 @@ export function DocifyEditorTabs({
     onHtmlChange,
     onVariablesChange,
     onPreviewModeChange,
+    onPreviewEndpointChange,
 }: DocifyEditorTabsProps) {
     return (
         <Tabs
@@ -133,6 +139,9 @@ export function DocifyEditorTabs({
                         onPreviewModeChange={onPreviewModeChange}
                         apiUrl={apiUrl}
                         localPreviewUrl={localPreviewUrl}
+                        previewEndpoints={previewEndpoints}
+                        selectedPreviewEndpoint={selectedPreviewEndpoint}
+                        onPreviewEndpointChange={onPreviewEndpointChange}
                         templateName={templateName}
                         description={description}
                         sampleData={sampleData}

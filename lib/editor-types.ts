@@ -14,11 +14,15 @@ export interface EditorConfig {
   syncMode: SyncMode
   apiUrl: string
   localPreviewUrl?: string
+  /** Docify-only: ordered list of relative PDF preview endpoint paths (e.g. ["/documents/preview-document"]). Index 0 = v1. */
+  previewEndpoints?: string[]
   credentialsType: CredentialsType
   credentials: Credential[]
   createdAt: string
   updatedAt: string
 }
+
+export const DEFAULT_PREVIEW_ENDPOINTS: string[] = ['/documents/preview-document']
 
 export interface Editor {
   id: string
