@@ -172,7 +172,9 @@ export function AddEditorForm({
       syncMode,
       apiUrl: apiUrl.trim(),
       localPreviewUrl: localPreviewUrl.trim(),
-      ...(type === 'docify' ? { previewEndpoints: resolvedPreviewEndpoints } : {}),
+      ...(type === 'docify'
+        ? { previewEndpoints: resolvedPreviewEndpoints }
+        : {}),
       credentialsType,
       credentials: validCredentials,
       createdAt: editingEditor?.createdAt || now,
@@ -264,19 +266,21 @@ export function AddEditorForm({
           </div>
 
           {type === 'docify' && (
-            <div className="space-y-2">
-              <Label htmlFor="preview-endpoints">PDF Preview Endpoints</Label>
-              <p className="text-xs text-muted-foreground">
-                JSON array of relative endpoint paths in order (v1, v2, …). Each path must start with <code>/</code>.
-              </p>
-              <Textarea
-                id="preview-endpoints"
-                className="font-mono text-xs min-h-[80px]"
-                placeholder='["/documents/preview-document"]'
-                value={previewEndpointsJson}
-                onChange={(e) => setPreviewEndpointsJson(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="preview-endpoints">PDF Preview Endpoints</Label>
+                <p className="text-xs text-muted-foreground">
+                  JSON array of relative endpoint paths in order (v1, v2, …). Each path must start with <code>/</code>.
+                </p>
+                <Textarea
+                  id="preview-endpoints"
+                  className="font-mono text-xs min-h-20"
+                  placeholder='["/documents/preview-document"]'
+                  value={previewEndpointsJson}
+                  onChange={(e) => setPreviewEndpointsJson(e.target.value)}
+                />
+              </div>
+            </>
           )}
 
           {syncMode === 'online' && (

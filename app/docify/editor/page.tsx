@@ -10,6 +10,7 @@ import { DocifyEditorTabs } from '@/components/DocifyEditorTabs'
 import { extractGoTemplateVariables, mergeVariablesWithJson } from '@/lib/extract-template-variables'
 import { updateDocifyTemplate, updateDocifyTemplateVariable } from '@/lib/editor-api'
 import { decodeBase64Utf8 } from '@/lib/base64'
+import { buildCredentialHeaders, appendCredentialQueryParams, buildStorageFileUrl } from '@/lib/docify-global-css'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
 import { DEFAULT_PREVIEW_ENDPOINTS } from '@/lib/editor-types'
@@ -36,6 +37,9 @@ interface PdfTemplate {
 }
 
 export default function DocifyEditorPage() {
+    // Max size for cacheable CSS/JS assets (1MB)
+    const MAX_CACHEABLE_ASSET_SIZE = 1024 * 1024
+
     const router = useRouter()
     const searchParams = useSearchParams()
     const editorId = searchParams.get('editorId')
@@ -55,6 +59,8 @@ export default function DocifyEditorPage() {
     const [isLoadingHtml, setIsLoadingHtml] = useState(false)
     const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
     const [zoom] = useState(100)
+    const [globalCssContent, setGlobalCssContent] = useState('')
+    const [globalJsContent, setGlobalJsContent] = useState('')
     const [selectedPreviewEndpoint, setSelectedPreviewEndpoint] = useState<string>(
         DEFAULT_PREVIEW_ENDPOINTS[0]
     )
@@ -73,6 +79,64 @@ export default function DocifyEditorPage() {
             }
         }
     }, [editorStorageLoaded, editorId, getEditor])
+
+    // Load global assets (CSS and JS) from storage
+    useEffect(() => {
+        if (!editor?.globalAssets?.length || !editor?.apiUrl) {
+            setGlobalCssContent('')
+            setGlobalJsContent('')
+            return
+        }
+
+        const loadAssets = async () => {
+            try {
+                const cssAssets: string[] = []
+                const jsAssets: string[] = []
+
+                    const assets = editor.globalAssets || []
+                    for (const asset of assets) {
+                    if (!['css', 'js'].includes(asset.type)) continue // Skip binary files
+
+                    const fileUrl = buildStorageFileUrl(editor.apiUrl, asset.fileName)
+                    const credentialUrl = appendCredentialQueryParams(fileUrl, editor.credentialsType, editor.credentials)
+                    const headers = buildCredentialHeaders(editor.credentialsType, editor.credentials)
+
+                    try {
+                            const response = await fetch(credentialUrl, { headers })
+                            if (response.ok) {
+                                // Check content length header to avoid loading large files into memory
+                                const contentLength = response.headers.get('content-length')
+                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : 0
+
+                                // Skip files larger than 1MB to avoid memory issues
+                                if (fileSizeBytes > 0 && fileSizeBytes > MAX_CACHEABLE_ASSET_SIZE) {
+                                    console.warn(
+                                        `Skipping large ${asset.type} asset ${asset.fileName} (${(fileSizeBytes / 1024 / 1024).toFixed(2)}MB)`
+                                    )
+                                    continue
+                                }
+
+                                const content = await response.text()
+                                if (asset.type === 'css') {
+                                    cssAssets.push(content)
+                                } else if (asset.type === 'js') {
+                                    jsAssets.push(content)
+                                }
+                            }
+                        } catch (err) {
+                            console.error(`Failed to load asset ${asset.fileName}:`, err)
+                        }
+                }
+
+                setGlobalCssContent(cssAssets.join('\n\n'))
+                setGlobalJsContent(jsAssets.join('\n\n'))
+            } catch (err) {
+                console.error('Failed to load global assets:', err)
+            }
+        }
+
+        loadAssets()
+    }, [editor?.globalAssets, editor?.apiUrl, editor?.credentialsType, editor?.credentials])
 
     // Load template from localStorage
     useEffect(() => {
@@ -328,6 +392,8 @@ export default function DocifyEditorPage() {
                 <DocifyEditorTabs
                     currentEditor={currentEditor}
                     htmlContent={htmlContent}
+                    globalCssContent={globalCssContent}
+                    globalJsContent={globalJsContent}
                     variablesContent={variablesContent}
                     pageSettings={pageSettings}
                     previewMode={previewMode}

@@ -39,10 +39,16 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Plus, ChevronLeft } from 'lucide-react'
+import { Plus, ChevronLeft, Loader2, Trash2, Upload } from 'lucide-react'
 import { useEditorStorage } from '@/hooks/useEditorStorage'
 import { toast } from 'sonner'
-import type { EditorConfig } from '@/lib/editor-types'
+import type { EditorConfig, GlobalAssetType } from '@/lib/editor-types'
+import {
+  appendCredentialQueryParams,
+  buildCredentialHeaders,
+  normalizeGlobalAssets,
+  parseStorageUploadResponse,
+} from '@/lib/docify-global-css'
 
 interface PdfTemplate {
   id: string
@@ -90,6 +96,12 @@ export default function DocifyPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<'templates' | 'global-assets'>('templates')
+  const [globalAssets, setGlobalAssets] = useState(
+    normalizeGlobalAssets(editor?.globalAssets)
+  )
+  const [isUploadingAsset, setIsUploadingAsset] = useState(false)
+  const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | GlobalAssetType>('all')
 
   useEffect(() => {
     if (isLoaded && editorId) {
@@ -105,6 +117,12 @@ export default function DocifyPage() {
       setLoading(false)
     }
   }, [isLoaded, editorId, getEditor])
+
+  useEffect(() => {
+    if (editor) {
+      setGlobalAssets(normalizeGlobalAssets(editor.globalAssets))
+    }
+  }, [editor?.id])
 
   const buildAuthHeaders = useCallback(
     (editorConfig: EditorConfig, includeJson: boolean = true): HeadersInit => {
@@ -172,6 +190,114 @@ export default function DocifyPage() {
     },
     []
   )
+
+  const handleGlobalAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>, assetType: GlobalAssetType) => {
+    const input = event.target
+    const file = input.files?.[0]
+    input.value = ''
+
+    if (!file || !editor) {
+      return
+    }
+
+    if (!editor.apiUrl.trim()) {
+      toast.error('API URL is required to upload assets')
+      return
+    }
+
+    // Validate file type
+    const extension = file.name.toLowerCase().split('.').pop()
+    if (assetType === 'css' && extension !== 'css') {
+      toast.error('Please upload a .css file')
+      return
+    }
+    if (assetType === 'js' && extension !== 'js') {
+      toast.error('Please upload a .js file')
+      return
+    }
+    if (assetType === 'binary' && !['png', 'jpg', 'jpeg', 'gif', 'woff', 'woff2', 'ttf', 'otf'].includes(extension || '')) {
+      toast.error('Please upload an image or font file')
+      return
+    }
+
+    setIsUploadingAsset(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const headers = buildCredentialHeaders(editor.credentialsType, editor.credentials)
+      const url = appendCredentialQueryParams(`${editor.apiUrl.trim()}/storage`, editor.credentialsType, editor.credentials)
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
+      }
+
+      let fileName: string | null = null
+      const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        const payload = await response.json()
+        fileName = parseStorageUploadResponse(payload)
+      } else {
+        fileName = parseStorageUploadResponse(await response.text())
+      }
+
+      if (!fileName) {
+        throw new Error('Upload succeeded but no storage file name was returned')
+      }
+
+      const updatedAssets = normalizeGlobalAssets([...globalAssets, { fileName, type: assetType }])
+      setGlobalAssets(updatedAssets)
+      toast.success(`Uploaded global ${assetType}: ${fileName}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Failed to upload global ${assetType}`
+      toast.error(message)
+    } finally {
+      setIsUploadingAsset(false)
+    }
+  }
+
+  const handleRemoveGlobalAsset = (fileName: string) => {
+    setGlobalAssets((prev) => prev.filter((item) => item.fileName !== fileName))
+  }
+
+  const handleGlobalAssetDescriptionChange = (fileName: string, description: string) => {
+    setGlobalAssets((prev) =>
+      prev.map((item) =>
+        item.fileName === fileName
+          ? {
+              ...item,
+              ...(description.trim() ? { description } : { description: undefined }),
+            }
+          : item
+      )
+    )
+  }
+
+  const saveEditorWithAssets = useCallback(async () => {
+    if (!editor) return
+
+    try {
+      const updatedEditor: EditorConfig = {
+        ...editor,
+        globalAssets: globalAssets,
+        updatedAt: new Date().toISOString(),
+      }
+
+      const existingEditors = editors
+      const updatedEditors = existingEditors.map((e) => (e.id === editor.id ? updatedEditor : e))
+      localStorage.setItem('docify-editors', JSON.stringify(updatedEditors))
+      setEditor(updatedEditor)
+      toast.success('Global assets configuration saved')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save global assets'
+      toast.error(message)
+    }
+  }, [editor, globalAssets, editors])
 
   const fetchTemplates = useCallback(
     async (editorConfig: EditorConfig) => {
@@ -465,15 +591,24 @@ export default function DocifyPage() {
 
         {/* Tabs Section */}
         <div className="mb-6 flex items-center gap-3 border-b border-border pb-4">
-          <Button variant="outline" className="gap-2">
+          <Button
+            variant={activeTab === 'templates' ? 'default' : 'ghost'}
+            className="gap-2"
+            onClick={() => setActiveTab('templates')}
+          >
             📋 Templates
           </Button>
-          <Button variant="ghost" className="gap-2">
+          <Button
+            variant={activeTab === 'global-assets' ? 'default' : 'ghost'}
+            className="gap-2"
+            onClick={() => setActiveTab('global-assets')}
+          >
             🌐 Global Assets
           </Button>
         </div>
 
         {/* PDF Templates Section */}
+        {activeTab === 'templates' && (
         <div className="mb-8">
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -788,7 +923,146 @@ export default function DocifyPage() {
             </>
           )}
         </div>
-      </div>
+        )}
+
+        {/* Global Assets Section */}
+        {activeTab === 'global-assets' && (
+        <div className="mb-8">
+          <div className="mb-6">
+            <div>
+              <h2 className="text-2xl font-bold">Global Assets</h2>
+              <p className="text-sm text-muted-foreground">
+                Manage CSS, JavaScript, images, and fonts that will be injected into templates
+              </p>
+            </div>
+          </div>
+
+          {editor ? (
+            <div className="space-y-4 rounded-md border border-border p-4">
+              {/* Asset Type Tabs */}
+              <div className="flex flex-wrap gap-2 pb-4 border-b border-border">
+                <Label>Upload:</Label>
+                {(['css', 'js', 'binary'] as const).map((type) => (
+                  <div key={type} className="relative">
+                    <Input
+                      id={`upload-${type}`}
+                      type="file"
+                      accept={
+                        type === 'css' ? '.css,text/css' :
+                        type === 'js' ? '.js,text/javascript' :
+                        '.png,.jpg,.jpeg,.gif,.woff,.woff2,.ttf,.otf'
+                      }
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      onChange={(e) => handleGlobalAssetUpload(e, type)}
+                      disabled={isUploadingAsset || !editor.apiUrl.trim()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploadingAsset || !editor.apiUrl.trim()}
+                      className="gap-2"
+                    >
+                      {isUploadingAsset ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          {type === 'css' ? 'CSS' : type === 'js' ? 'JavaScript' : 'Image/Font'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Filter and List */}
+              {globalAssets.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">Filter:</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(['all', 'css', 'js', 'binary'] as const).map((filter) => (
+                        <Button
+                          key={filter}
+                          variant={assetTypeFilter === filter ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setAssetTypeFilter(filter)}
+                        >
+                          {filter === 'all' ? 'All' : filter === 'css' ? 'CSS' : filter === 'js' ? 'JS' : 'Binary'}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {globalAssets
+                      .filter((asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter)
+                      .map((asset) => (
+                        <div key={asset.fileName} className="rounded border border-border px-3 py-3 text-sm">
+                          <div className="mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate pr-3 font-medium">{asset.fileName}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {asset.type === 'js' ? 'JavaScript' : asset.type === 'css' ? 'CSS' : 'Binary'}
+                              </Badge>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                handleRemoveGlobalAsset(asset.fileName)
+                                toast.success(`Removed ${asset.fileName}`)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {asset.type !== 'binary' && (
+                            <Input
+                              value={asset.description || ''}
+                              placeholder="Optional description (e.g., Brand colors, Utilities)"
+                              onChange={(e) =>
+                                handleGlobalAssetDescriptionChange(asset.fileName, e.target.value)
+                              }
+                            />
+                          )}
+                        </div>
+                      ))}
+                  </div>
+
+                  <div className="pt-4 border-t border-border mt-4">
+                    <Button
+                      onClick={saveEditorWithAssets}
+                      className="w-full"
+                    >
+                      Save Global Assets Configuration
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No global assets configured. Upload CSS, JavaScript, images, or fonts to get started.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-sm text-muted-foreground">
+                  No editor selected. Please select an editor to manage global assets.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+        )}
 
       {selectedTemplateIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-lg border border-border bg-background p-3 shadow-lg">
@@ -853,6 +1127,7 @@ export default function DocifyPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </main>
   )
 }

@@ -18,6 +18,8 @@ import { DocifyPreviewPanel } from '@/components/DocifyPreviewPanel'
 interface DocifyEditorTabsProps {
     currentEditor: string
     htmlContent: string
+    globalCssContent: string
+    globalJsContent: string
     variablesContent: string
     pageSettings: PageSettings
     previewMode: 'html' | 'pdf' | 'local'
@@ -42,6 +44,8 @@ interface DocifyEditorTabsProps {
 export function DocifyEditorTabs({
     currentEditor,
     htmlContent,
+    globalCssContent,
+    globalJsContent,
     variablesContent,
     pageSettings,
     previewMode,
@@ -134,6 +138,8 @@ export function DocifyEditorTabs({
                 <ResizablePanel defaultSize={50} minSize={30}>
                     <DocifyPreviewPanel
                         htmlContent={htmlContent}
+                        globalCssContent={globalCssContent}
+                        globalJsContent={globalJsContent}
                         pageSettings={pageSettings}
                         previewMode={previewMode}
                         onPreviewModeChange={onPreviewModeChange}
