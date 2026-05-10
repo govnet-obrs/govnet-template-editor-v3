@@ -10,7 +10,12 @@ import { DocifyEditorTabs } from '@/components/DocifyEditorTabs'
 import { extractGoTemplateVariables, mergeVariablesWithJson } from '@/lib/extract-template-variables'
 import { updateDocifyTemplate, updateDocifyTemplateVariable } from '@/lib/editor-api'
 import { decodeBase64Utf8 } from '@/lib/base64'
-import { buildCredentialHeaders, appendCredentialQueryParams, buildStorageFileUrl } from '@/lib/docify-global-css'
+import {
+    buildGlobalAssetApiPath,
+    combineGlobalCssAssets,
+    combineGlobalJsAssets,
+    type ManifestAsset,
+} from '@/lib/docify-global-css'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
 import { DEFAULT_PREVIEW_ENDPOINTS } from '@/lib/editor-types'
@@ -34,6 +39,11 @@ interface PdfTemplate {
     createdAt: string
     updatedAt?: string
     deletedAt?: string | null
+}
+
+interface GlobalAssetsManifestResponse {
+    version: string
+    assets: Array<ManifestAsset & { url: string }>
 }
 
 export default function DocifyEditorPage() {
@@ -80,63 +90,74 @@ export default function DocifyEditorPage() {
         }
     }, [editorStorageLoaded, editorId, getEditor])
 
-    // Load global assets (CSS and JS) from storage
+    // Load global assets (CSS and JS) from local manifest API.
+    // Binary assets are never fetched into editor state.
     useEffect(() => {
-        if (!editor?.globalAssets?.length || !editor?.apiUrl) {
-            setGlobalCssContent('')
-            setGlobalJsContent('')
-            return
-        }
-
         const loadAssets = async () => {
             try {
-                const cssAssets: string[] = []
-                const jsAssets: string[] = []
+                const manifestResponse = await fetch('/api/global-assets/manifest', {
+                    cache: 'no-store',
+                })
 
-                    const assets = editor.globalAssets || []
-                    for (const asset of assets) {
-                    if (!['css', 'js'].includes(asset.type)) continue // Skip binary files
-
-                    const fileUrl = buildStorageFileUrl(editor.apiUrl, asset.fileName)
-                    const credentialUrl = appendCredentialQueryParams(fileUrl, editor.credentialsType, editor.credentials)
-                    const headers = buildCredentialHeaders(editor.credentialsType, editor.credentials)
-
-                    try {
-                            const response = await fetch(credentialUrl, { headers })
-                            if (response.ok) {
-                                // Check content length header to avoid loading large files into memory
-                                const contentLength = response.headers.get('content-length')
-                                const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : 0
-
-                                // Skip files larger than 1MB to avoid memory issues
-                                if (fileSizeBytes > 0 && fileSizeBytes > MAX_CACHEABLE_ASSET_SIZE) {
-                                    console.warn(
-                                        `Skipping large ${asset.type} asset ${asset.fileName} (${(fileSizeBytes / 1024 / 1024).toFixed(2)}MB)`
-                                    )
-                                    continue
-                                }
-
-                                const content = await response.text()
-                                if (asset.type === 'css') {
-                                    cssAssets.push(content)
-                                } else if (asset.type === 'js') {
-                                    jsAssets.push(content)
-                                }
-                            }
-                        } catch (err) {
-                            console.error(`Failed to load asset ${asset.fileName}:`, err)
-                        }
+                if (!manifestResponse.ok) {
+                    throw new Error('Failed to load global assets manifest')
                 }
 
-                setGlobalCssContent(cssAssets.join('\n\n'))
-                setGlobalJsContent(jsAssets.join('\n\n'))
+                const manifestPayload =
+                    (await manifestResponse.json()) as GlobalAssetsManifestResponse
+                const manifestAssets = manifestPayload.assets ?? []
+
+                const cssAssets: Array<{ src: string; type: 'css'; content: string }> = []
+                const jsAssets: Array<{ src: string; type: 'js'; content: string }> = []
+
+                for (const asset of manifestAssets) {
+                    if (asset.type !== 'css' && asset.type !== 'js') {
+                        continue
+                    }
+
+                    const assetUrl = asset.url || buildGlobalAssetApiPath(asset.src)
+                    try {
+                        const response = await fetch(assetUrl, { cache: 'no-store' })
+                        if (!response.ok) {
+                            continue
+                        }
+
+                        // Avoid loading large CSS/JS assets into memory for preview injection.
+                        const contentLength = response.headers.get('content-length')
+                        const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : 0
+                        if (fileSizeBytes > 0 && fileSizeBytes > MAX_CACHEABLE_ASSET_SIZE) {
+                            console.warn(
+                                `Skipping large ${asset.type} asset ${asset.src} (${(
+                                    fileSizeBytes /
+                                    1024 /
+                                    1024
+                                ).toFixed(2)}MB)`
+                            )
+                            continue
+                        }
+
+                        const content = await response.text()
+                        if (asset.type === 'css') {
+                            cssAssets.push({ src: asset.src, type: 'css', content })
+                        } else {
+                            jsAssets.push({ src: asset.src, type: 'js', content })
+                        }
+                    } catch (err) {
+                        console.error(`Failed to load asset ${asset.src}:`, err)
+                    }
+                }
+
+                setGlobalCssContent(combineGlobalCssAssets(cssAssets))
+                setGlobalJsContent(combineGlobalJsAssets(jsAssets))
             } catch (err) {
                 console.error('Failed to load global assets:', err)
+                setGlobalCssContent('')
+                setGlobalJsContent('')
             }
         }
 
         loadAssets()
-    }, [editor?.globalAssets, editor?.apiUrl, editor?.credentialsType, editor?.credentials])
+    }, [MAX_CACHEABLE_ASSET_SIZE])
 
     // Load template from localStorage
     useEffect(() => {

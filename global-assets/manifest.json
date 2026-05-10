@@ -1,0 +1,19 @@
+{
+    "version": "1.0.0",
+    "assets": [
+        {
+            "src": "form.css",
+            "name": "Forms",
+            "description": "base styles for fobrs forms",
+            "type": "css",
+            "priority": 2
+        },
+        {
+            "src": "reset.css",
+            "name": "Reset",
+            "description": "reset gotenberg preview so as to apply other styles from clean slate",
+            "type": "css",
+            "priority": 0
+        }
+    ]
+}

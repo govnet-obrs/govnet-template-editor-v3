@@ -1,9 +1,17 @@
-import type {
-  Credential,
-  CredentialsType,
-  GlobalAssetReference,
-  GlobalAssetType,
-} from '@/lib/editor-types'
+export type ManifestAssetType = 'css' | 'js' | 'binary'
+
+export interface ManifestAsset {
+  src: string
+  name: string
+  description?: string
+  type: ManifestAssetType
+  priority?: number
+}
+
+export interface ManifestFile {
+  version: string
+  assets: ManifestAsset[]
+}
 
 const GLOBAL_CSS_STYLE_ATTR = 'data-docify-global-css'
 const GLOBAL_JS_SCRIPT_ATTR = 'data-docify-global-js'
@@ -16,85 +24,101 @@ const GLOBAL_JS_SCRIPT_BLOCK_REGEX = new RegExp(
   'gi'
 )
 
-export interface GlobalAsset {
-  fileName: string
-  type: GlobalAssetType
+export interface GlobalAssetContent {
+  src: string
+  type: ManifestAssetType
   content: string
 }
 
-export interface StorageFetchResult {
-  fileName: string
-  content: string | null
-  error: string | null
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null
 }
 
-/**
- * Normalize global assets to ensure consistent structure and deduplication.
- * Handles backward compatibility with old globalCssFiles format.
- */
-export const normalizeGlobalAssets = (
-  assets: Array<GlobalAssetReference | string> | undefined
-): GlobalAssetReference[] => {
-  if (!assets?.length) {
+export const isLocalManifestSrc = (src: string): boolean => {
+  if (!src.trim()) {
+    return false
+  }
+
+  return !/^https?:\/\//i.test(src) && !src.startsWith('/')
+}
+
+export const isRemoteManifestSrc = (src: string): boolean => {
+  return /^https?:\/\//i.test(src.trim())
+}
+
+export const normalizeManifestAssets = (payload: unknown): ManifestAsset[] => {
+  if (!isRecord(payload) || !Array.isArray(payload.assets)) {
     return []
   }
 
   const seen = new Set<string>()
-  return assets
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        // Backward compatibility: legacy string[] format assumed CSS
-        const fileName = entry.trim()
-        if (!fileName) {
-          return null
-        }
-        return { fileName, type: 'css' as const }
-      }
+  const normalized: ManifestAsset[] = []
 
-      if (!entry || typeof entry.fileName !== 'string') {
-        return null
-      }
+  for (const entry of payload.assets) {
+    if (!isRecord(entry)) {
+      continue
+    }
 
-      const fileName = entry.fileName.trim()
-      if (!fileName) {
-        return null
-      }
+    const src = typeof entry.src === 'string' ? entry.src.trim() : ''
+    const name = typeof entry.name === 'string' ? entry.name.trim() : ''
+    const description =
+      typeof entry.description === 'string' ? entry.description.trim() : undefined
+    const type = entry.type
+    const priority =
+      typeof entry.priority === 'number' ? entry.priority : undefined
 
-      const type = (entry.type || 'css') as GlobalAssetType
-      const description = typeof entry.description === 'string' ? entry.description.trim() : undefined
-      return {
-        fileName,
-        type,
-        ...(description ? { description } : {}),
-      }
+    if (!src || !name) {
+      continue
+    }
+
+    if (type !== 'css' && type !== 'js' && type !== 'binary') {
+      continue
+    }
+
+    const isRemote = isRemoteManifestSrc(src)
+    const isLocal = isLocalManifestSrc(src)
+
+    // Only binary assets can reference remote URLs; CSS/JS must be local files.
+    if ((type === 'css' || type === 'js') && !isLocal) {
+      continue
+    }
+    if (type === 'binary' && !isLocal && !isRemote) {
+      continue
+    }
+
+    if (seen.has(src)) {
+      continue
+    }
+
+    seen.add(src)
+    normalized.push({
+      src,
+      name,
+      type,
+      ...(description ? { description } : {}),
+      ...(priority !== undefined ? { priority } : {}),
     })
-    .filter((entry): entry is GlobalAssetReference => {
-      if (!entry || seen.has(entry.fileName)) {
-        return false
-      }
-      seen.add(entry.fileName)
-      return true
-    })
-}
-
-/**
- * Legacy function for backward compatibility - normalizes old CSS format
- */
-export const normalizeGlobalCssFiles = (
-  files: Array<{ fileName: string; description?: string } | string> | undefined
-): GlobalAssetReference[] => {
-  if (!files?.length) {
-    return []
   }
 
-  return normalizeGlobalAssets(
-    (files as any[]).map((f) => 
-      typeof f === 'string' ? f : { ...f, type: 'css' }
-    )
-  )
+  return normalized.sort((a, b) => {
+    const aPriority = a.priority ?? Number.MAX_SAFE_INTEGER
+    const bPriority = b.priority ?? Number.MAX_SAFE_INTEGER
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority
+    }
+    return a.src.localeCompare(b.src)
+  })
 }
 
-export const combineGlobalCssAssets = (assets: GlobalAsset[]): string => {
+export const buildGlobalAssetApiPath = (src: string): string => {
+  const encodedPath = src
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+  return `/api/global-assets/${encodedPath}`
+}
+
+export const combineGlobalCssAssets = (assets: GlobalAssetContent[]): string => {
   const cssAssets = assets.filter((a) => a.type === 'css')
   if (!cssAssets.length) {
     return ''
@@ -102,14 +126,14 @@ export const combineGlobalCssAssets = (assets: GlobalAsset[]): string => {
 
   return cssAssets
     .map((asset) => {
-      const header = `/* Global CSS: ${asset.fileName} */`
+      const header = `/* Global CSS: ${asset.src} */`
       return `${header}\n${asset.content.trim()}`
     })
     .join('\n\n')
     .trim()
 }
 
-export const combineGlobalJsAssets = (assets: GlobalAsset[]): string => {
+export const combineGlobalJsAssets = (assets: GlobalAssetContent[]): string => {
   const jsAssets = assets.filter((a) => a.type === 'js')
   if (!jsAssets.length) {
     return ''
@@ -117,7 +141,7 @@ export const combineGlobalJsAssets = (assets: GlobalAsset[]): string => {
 
   return jsAssets
     .map((asset) => {
-      const header = `// Global JS: ${asset.fileName}`
+      const header = `// Global JS: ${asset.src}`
       return `${header}\n${asset.content.trim()}`
     })
     .join('\n\n')
@@ -184,77 +208,4 @@ export const injectGlobalAssetsIntoHtml = (html: string, cssContent: string, jsC
     result = injectGlobalJsIntoHtml(result, jsContent)
   }
   return result
-}
-
-export const buildCredentialHeaders = (
-  credentialsType: CredentialsType,
-  credentials: Credential[],
-  includeJson = false
-): HeadersInit => {
-  const headers: HeadersInit = {}
-
-  if (includeJson) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  if (credentialsType === 'header') {
-    credentials.forEach((cred) => {
-      if (cred.key && cred.value) {
-        headers[cred.key] = cred.value
-      }
-    })
-  }
-
-  return headers
-}
-
-export const appendCredentialQueryParams = (
-  url: string,
-  credentialsType: CredentialsType,
-  credentials: Credential[]
-): string => {
-  if (credentialsType !== 'query') {
-    return url
-  }
-
-  const params = new URLSearchParams()
-  credentials.forEach((cred) => {
-    if (cred.key && cred.value) {
-      params.append(cred.key, cred.value)
-    }
-  })
-
-  if (Array.from(params.keys()).length === 0) {
-    return url
-  }
-
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}${params.toString()}`
-}
-
-export const parseStorageUploadResponse = (payload: unknown): string | null => {
-  if (typeof payload === 'string') {
-    return payload.trim() || null
-  }
-
-  if (typeof payload !== 'object' || payload === null) {
-    return null
-  }
-
-  const record = payload as Record<string, unknown>
-  const candidates = ['fileName', 'filename', 'name', 'data']
-
-  for (const key of candidates) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
-    }
-  }
-
-  return null
-}
-
-export const buildStorageFileUrl = (apiUrl: string, fileName: string): string => {
-  const normalizedBase = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl
-  return `${normalizedBase}/storage/${encodeURIComponent(fileName)}`
 }

@@ -39,16 +39,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Plus, ChevronLeft, Loader2, Trash2, Upload } from 'lucide-react'
+import { Plus, ChevronLeft } from 'lucide-react'
 import { useEditorStorage } from '@/hooks/useEditorStorage'
 import { toast } from 'sonner'
-import type { EditorConfig, GlobalAssetType } from '@/lib/editor-types'
-import {
-  appendCredentialQueryParams,
-  buildCredentialHeaders,
-  normalizeGlobalAssets,
-  parseStorageUploadResponse,
-} from '@/lib/docify-global-css'
+import type { EditorConfig } from '@/lib/editor-types'
+import type { ManifestAsset } from '@/lib/docify-global-css'
 
 interface PdfTemplate {
   id: string
@@ -74,13 +69,18 @@ interface TemplatesResponse {
   data?: PdfTemplate[]
 }
 
+interface GlobalAssetsManifestResponse {
+  version: string
+  assets: Array<ManifestAsset & { url: string }>
+}
+
 const ITEMS_PER_PAGE_OPTIONS = [24, 48, 96, 192]
 
 export default function DocifyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const editorId = searchParams.get('editorId')
-  const { getEditor, isLoaded, editors } = useEditorStorage()
+  const { getEditor, isLoaded } = useEditorStorage()
 
   const [editor, setEditor] = useState<EditorConfig | null>(null)
   const [templates, setTemplates] = useState<PdfTemplate[]>([])
@@ -97,11 +97,12 @@ export default function DocifyPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'templates' | 'global-assets'>('templates')
-  const [globalAssets, setGlobalAssets] = useState(
-    normalizeGlobalAssets(editor?.globalAssets)
-  )
-  const [isUploadingAsset, setIsUploadingAsset] = useState(false)
-  const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | GlobalAssetType>('all')
+  const [manifestAssets, setManifestAssets] = useState<
+    Array<ManifestAsset & { url: string }>
+  >([])
+  const [isLoadingManifestAssets, setIsLoadingManifestAssets] = useState(false)
+  const [manifestAssetsError, setManifestAssetsError] = useState<string | null>(null)
+  const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | 'css' | 'js' | 'binary'>('all')
 
   useEffect(() => {
     if (isLoaded && editorId) {
@@ -119,10 +120,30 @@ export default function DocifyPage() {
   }, [isLoaded, editorId, getEditor])
 
   useEffect(() => {
-    if (editor) {
-      setGlobalAssets(normalizeGlobalAssets(editor.globalAssets))
+    const fetchManifestAssets = async () => {
+      setIsLoadingManifestAssets(true)
+      setManifestAssetsError(null)
+      try {
+        const response = await fetch('/api/global-assets/manifest', {
+          cache: 'no-store',
+        })
+        if (!response.ok) {
+          throw new Error('Failed to load global assets manifest')
+        }
+        const payload = (await response.json()) as GlobalAssetsManifestResponse
+        setManifestAssets(payload.assets || [])
+      } catch (err) {
+        setManifestAssetsError(
+          err instanceof Error ? err.message : 'Failed to load global assets manifest'
+        )
+        setManifestAssets([])
+      } finally {
+        setIsLoadingManifestAssets(false)
+      }
     }
-  }, [editor?.id])
+
+    fetchManifestAssets()
+  }, [])
 
   const buildAuthHeaders = useCallback(
     (editorConfig: EditorConfig, includeJson: boolean = true): HeadersInit => {
@@ -190,114 +211,6 @@ export default function DocifyPage() {
     },
     []
   )
-
-  const handleGlobalAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>, assetType: GlobalAssetType) => {
-    const input = event.target
-    const file = input.files?.[0]
-    input.value = ''
-
-    if (!file || !editor) {
-      return
-    }
-
-    if (!editor.apiUrl.trim()) {
-      toast.error('API URL is required to upload assets')
-      return
-    }
-
-    // Validate file type
-    const extension = file.name.toLowerCase().split('.').pop()
-    if (assetType === 'css' && extension !== 'css') {
-      toast.error('Please upload a .css file')
-      return
-    }
-    if (assetType === 'js' && extension !== 'js') {
-      toast.error('Please upload a .js file')
-      return
-    }
-    if (assetType === 'binary' && !['png', 'jpg', 'jpeg', 'gif', 'woff', 'woff2', 'ttf', 'otf'].includes(extension || '')) {
-      toast.error('Please upload an image or font file')
-      return
-    }
-
-    setIsUploadingAsset(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const headers = buildCredentialHeaders(editor.credentialsType, editor.credentials)
-      const url = appendCredentialQueryParams(`${editor.apiUrl.trim()}/storage`, editor.credentialsType, editor.credentials)
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
-      }
-
-      let fileName: string | null = null
-      const contentType = response.headers.get('content-type') || ''
-      if (contentType.includes('application/json')) {
-        const payload = await response.json()
-        fileName = parseStorageUploadResponse(payload)
-      } else {
-        fileName = parseStorageUploadResponse(await response.text())
-      }
-
-      if (!fileName) {
-        throw new Error('Upload succeeded but no storage file name was returned')
-      }
-
-      const updatedAssets = normalizeGlobalAssets([...globalAssets, { fileName, type: assetType }])
-      setGlobalAssets(updatedAssets)
-      toast.success(`Uploaded global ${assetType}: ${fileName}`)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : `Failed to upload global ${assetType}`
-      toast.error(message)
-    } finally {
-      setIsUploadingAsset(false)
-    }
-  }
-
-  const handleRemoveGlobalAsset = (fileName: string) => {
-    setGlobalAssets((prev) => prev.filter((item) => item.fileName !== fileName))
-  }
-
-  const handleGlobalAssetDescriptionChange = (fileName: string, description: string) => {
-    setGlobalAssets((prev) =>
-      prev.map((item) =>
-        item.fileName === fileName
-          ? {
-              ...item,
-              ...(description.trim() ? { description } : { description: undefined }),
-            }
-          : item
-      )
-    )
-  }
-
-  const saveEditorWithAssets = useCallback(async () => {
-    if (!editor) return
-
-    try {
-      const updatedEditor: EditorConfig = {
-        ...editor,
-        globalAssets: globalAssets,
-        updatedAt: new Date().toISOString(),
-      }
-
-      const existingEditors = editors
-      const updatedEditors = existingEditors.map((e) => (e.id === editor.id ? updatedEditor : e))
-      localStorage.setItem('docify-editors', JSON.stringify(updatedEditors))
-      setEditor(updatedEditor)
-      toast.success('Global assets configuration saved')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save global assets'
-      toast.error(message)
-    }
-  }, [editor, globalAssets, editors])
 
   const fetchTemplates = useCallback(
     async (editorConfig: EditorConfig) => {
@@ -932,135 +845,100 @@ export default function DocifyPage() {
             <div>
               <h2 className="text-2xl font-bold">Global Assets</h2>
               <p className="text-sm text-muted-foreground">
-                Manage CSS, JavaScript, images, and fonts that will be injected into templates
+                Listed from global-assets manifest and loaded through local API routes
               </p>
             </div>
           </div>
 
-          {editor ? (
-            <div className="space-y-4 rounded-md border border-border p-4">
-              {/* Asset Type Tabs */}
-              <div className="flex flex-wrap gap-2 pb-4 border-b border-border">
-                <Label>Upload:</Label>
-                {(['css', 'js', 'binary'] as const).map((type) => (
-                  <div key={type} className="relative">
-                    <Input
-                      id={`upload-${type}`}
-                      type="file"
-                      accept={
-                        type === 'css' ? '.css,text/css' :
-                        type === 'js' ? '.js,text/javascript' :
-                        '.png,.jpg,.jpeg,.gif,.woff,.woff2,.ttf,.otf'
-                      }
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      onChange={(e) => handleGlobalAssetUpload(e, type)}
-                      disabled={isUploadingAsset || !editor.apiUrl.trim()}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isUploadingAsset || !editor.apiUrl.trim()}
-                      className="gap-2"
-                    >
-                      {isUploadingAsset ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4" />
-                          {type === 'css' ? 'CSS' : type === 'js' ? 'JavaScript' : 'Image/Font'}
-                        </>
-                      )}
-                    </Button>
-                  </div>
+          <div className="space-y-4 rounded-md border border-border p-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Filter:</Label>
+              <div className="flex flex-wrap gap-2">
+                {(['all', 'css', 'js', 'binary'] as const).map((filter) => (
+                  <Button
+                    key={filter}
+                    variant={assetTypeFilter === filter ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAssetTypeFilter(filter)}
+                  >
+                    {filter === 'all' ? 'All' : filter === 'css' ? 'CSS' : filter === 'js' ? 'JS' : 'Binary'}
+                  </Button>
                 ))}
               </div>
+            </div>
 
-              {/* Filter and List */}
-              {globalAssets.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">Filter:</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {(['all', 'css', 'js', 'binary'] as const).map((filter) => (
-                        <Button
-                          key={filter}
-                          variant={assetTypeFilter === filter ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setAssetTypeFilter(filter)}
-                        >
-                          {filter === 'all' ? 'All' : filter === 'css' ? 'CSS' : filter === 'js' ? 'JS' : 'Binary'}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+            {manifestAssetsError && (
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="pt-4">
+                  <p className="text-sm text-destructive">{manifestAssetsError}</p>
+                </CardContent>
+              </Card>
+            )}
 
-                  <div className="space-y-2">
-                    {globalAssets
-                      .filter((asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter)
-                      .map((asset) => (
-                        <div key={asset.fileName} className="rounded border border-border px-3 py-3 text-sm">
-                          <div className="mb-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate pr-3 font-medium">{asset.fileName}</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {asset.type === 'js' ? 'JavaScript' : asset.type === 'css' ? 'CSS' : 'Binary'}
-                              </Badge>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                handleRemoveGlobalAsset(asset.fileName)
-                                toast.success(`Removed ${asset.fileName}`)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {asset.type !== 'binary' && (
-                            <Input
-                              value={asset.description || ''}
-                              placeholder="Optional description (e.g., Brand colors, Utilities)"
-                              onChange={(e) =>
-                                handleGlobalAssetDescriptionChange(asset.fileName, e.target.value)
-                              }
-                            />
-                          )}
-                        </div>
-                      ))}
-                  </div>
+            {isLoadingManifestAssets && (
+              <p className="text-sm text-muted-foreground">Loading manifest assets...</p>
+            )}
 
-                  <div className="pt-4 border-t border-border mt-4">
-                    <Button
-                      onClick={saveEditorWithAssets}
-                      className="w-full"
-                    >
-                      Save Global Assets Configuration
-                    </Button>
-                  </div>
-                </div>
-              ) : (
+            {!isLoadingManifestAssets &&
+              manifestAssets.filter(
+                (asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter
+              ).length === 0 && (
                 <div className="py-8 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No global assets configured. Upload CSS, JavaScript, images, or fonts to get started.
+                    No assets found in global-assets manifest for this filter.
                   </p>
                 </div>
               )}
+
+            <div className="space-y-2">
+              {manifestAssets
+                .filter((asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter)
+                .map((asset) => {
+                  const canPreviewImage =
+                    asset.type === 'binary' &&
+                    /\.(png|jpe?g|gif|webp|svg)$/i.test(asset.src)
+
+                  return (
+                    <div key={asset.src} className="rounded border border-border px-3 py-3 text-sm">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{asset.name}</p>
+                          <p className="text-xs text-muted-foreground">{asset.src}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                          {asset.type === 'js' ? 'JavaScript' : asset.type === 'css' ? 'CSS' : 'Binary'}
+                        </Badge>
+                      </div>
+
+                      {asset.description && (
+                        <p className="mb-2 text-xs text-muted-foreground">{asset.description}</p>
+                      )}
+
+                      {canPreviewImage ? (
+                        <img
+                          src={asset.url}
+                          alt={asset.name}
+                          className="max-h-36 rounded border border-border object-contain"
+                        />
+                      ) : asset.type === 'binary' ? (
+                        <p className="text-xs text-muted-foreground">
+                          Preview not available for this binary asset type in browser.
+                        </p>
+                      ) : (
+                        <a
+                          href={asset.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary underline"
+                        >
+                          Open file
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
             </div>
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-center text-sm text-muted-foreground">
-                  No editor selected. Please select an editor to manage global assets.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          </div>
         </div>
         )}
 
