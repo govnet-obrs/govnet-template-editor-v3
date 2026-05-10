@@ -59,6 +59,13 @@ export function DocifyPreviewPanel({
     const lastLocalPdfUrlRef = useRef<string | null>(null)
     const isGeneratingRef = useRef({ pdf: false, local: false })
     const hasLocalPreview = Boolean(localPreviewUrl?.trim())
+    const htmlPreviewContent = injectGlobalAssetsIntoHtml(
+        htmlContent,
+        globalCssContent,
+        globalJsContent,
+        globalCssAssetNames,
+        globalJsAssetNames
+    )
 
     const revokePdfUrl = useCallback((url: string | null) => {
         if (url) {
@@ -311,10 +318,10 @@ export function DocifyPreviewPanel({
             </div>
             <div className="flex-1 overflow-auto bg-white">
                 {previewMode === 'html' ? (
-                    htmlContent ? (
+                    htmlPreviewContent ? (
                         <iframe
                             title="Preview"
-                            srcDoc={htmlContent}
+                            srcDoc={htmlPreviewContent}
                             className="w-full h-full border-0"
                             sandbox="allow-scripts"
                         />

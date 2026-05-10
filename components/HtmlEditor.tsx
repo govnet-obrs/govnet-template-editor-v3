@@ -9,18 +9,20 @@ import { Download, Upload } from 'lucide-react'
 
 export interface HtmlEditorProps {
   htmlContent: string
+  downloadHtmlContent?: string
   onHtmlChange: (value: string) => void
   zoom: number
   onPushHtml?: () => void
 }
 
-export function HtmlEditor({ htmlContent, onHtmlChange, zoom, onPushHtml }: HtmlEditorProps) {
+export function HtmlEditor({ htmlContent, downloadHtmlContent, onHtmlChange, zoom, onPushHtml }: HtmlEditorProps) {
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<any>(null)
   const { resolvedTheme } = useTheme()
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([htmlContent || ''], { type: 'text/html;charset=utf-8' })
+    const contentToDownload = downloadHtmlContent ?? htmlContent
+    const blob = new Blob([contentToDownload || ''], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -29,7 +31,7 @@ export function HtmlEditor({ htmlContent, onHtmlChange, zoom, onPushHtml }: Html
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 0)
-  }, [htmlContent])
+  }, [downloadHtmlContent, htmlContent])
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor

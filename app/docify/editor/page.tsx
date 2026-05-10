@@ -20,6 +20,8 @@ import {
     combineGlobalJsAssets,
     INJECTED_GLOBAL_CSS_ATTR,
     INJECTED_GLOBAL_JS_ATTR,
+    injectGlobalAssetsIntoHtml,
+    maskInjectedGlobalAssetsForEditing,
     parseInjectedAssetNamesFromHtml,
     type ManifestAsset,
 } from '@/lib/docify-global-assets'
@@ -55,6 +57,9 @@ interface GlobalAssetsManifestResponse {
 
 type AssetSyncStatus = 'idle' | 'syncing' | 'saved' | 'error'
 
+const GLOBAL_CSS_AUTO_SYNC_KEY = 'docify-global-css-auto-sync-enabled'
+const GLOBAL_JS_AUTO_SYNC_KEY = 'docify-global-js-auto-sync-enabled'
+
 export default function DocifyEditorPage() {
     // Max size for cacheable CSS/JS assets (1MB)
     const MAX_CACHEABLE_ASSET_SIZE = 1024 * 1024
@@ -79,17 +84,14 @@ export default function DocifyEditorPage() {
     const [isLoadingHtml, setIsLoadingHtml] = useState(false)
     const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
     const [zoom] = useState(100)
-    const [globalCssContent, setGlobalCssContent] = useState('')
-    const [globalCssAssetNames, setGlobalCssAssetNames] = useState<string[]>([])
-    const [globalJsContent, setGlobalJsContent] = useState('')
-    const [globalJsAssetNames, setGlobalJsAssetNames] = useState<string[]>([])
     const [manifestAssets, setManifestAssets] = useState<Array<ManifestAsset & { url: string }>>([])
+    const [assetContentBySrc, setAssetContentBySrc] = useState<Record<string, string>>({})
     const [selectedCssAssetSrc, setSelectedCssAssetSrc] = useState('')
     const [selectedJsAssetSrc, setSelectedJsAssetSrc] = useState('')
     const [cssEditorContent, setCssEditorContent] = useState('')
     const [jsEditorContent, setJsEditorContent] = useState('')
-    const [cssAutoSync, setCssAutoSync] = useState(false)
-    const [jsAutoSync, setJsAutoSync] = useState(false)
+    const [cssAutoSync, setCssAutoSync] = useState(true)
+    const [jsAutoSync, setJsAutoSync] = useState(true)
     const [cssSyncStatus, setCssSyncStatus] = useState<AssetSyncStatus>('idle')
     const [jsSyncStatus, setJsSyncStatus] = useState<AssetSyncStatus>('idle')
     const [cssSyncMessage, setCssSyncMessage] = useState('')
@@ -134,6 +136,94 @@ export default function DocifyEditorPage() {
         [manifestAssets, templateJsAssetNames]
     )
 
+    const cssAssetsForInjection = useMemo(
+        () => cssAssetsInTemplate.filter((asset) => (assetContentBySrc[asset.src] || '').trim().length > 0),
+        [cssAssetsInTemplate, assetContentBySrc]
+    )
+
+    const jsAssetsForInjection = useMemo(
+        () => jsAssetsInTemplate.filter((asset) => (assetContentBySrc[asset.src] || '').trim().length > 0),
+        [jsAssetsInTemplate, assetContentBySrc]
+    )
+
+    const globalCssContent = useMemo(
+        () =>
+            combineGlobalCssAssets(
+                cssAssetsForInjection.map((asset) => ({
+                    src: asset.src,
+                    type: 'css' as const,
+                    content: assetContentBySrc[asset.src] || '',
+                }))
+            ),
+        [cssAssetsForInjection, assetContentBySrc]
+    )
+
+    const globalJsContent = useMemo(
+        () =>
+            combineGlobalJsAssets(
+                jsAssetsForInjection.map((asset) => ({
+                    src: asset.src,
+                    type: 'js' as const,
+                    content: assetContentBySrc[asset.src] || '',
+                }))
+            ),
+        [jsAssetsForInjection, assetContentBySrc]
+    )
+
+    const globalCssAssetNames = useMemo(
+        () => cssAssetsForInjection.map((asset) => asset.name || asset.src),
+        [cssAssetsForInjection]
+    )
+
+    const globalJsAssetNames = useMemo(
+        () => jsAssetsForInjection.map((asset) => asset.name || asset.src),
+        [jsAssetsForInjection]
+    )
+
+    const htmlContentWithInjectedGlobalAssets = useMemo(
+        () =>
+            injectGlobalAssetsIntoHtml(
+                htmlContent,
+                globalCssContent,
+                globalJsContent,
+                globalCssAssetNames,
+                globalJsAssetNames
+            ),
+        [htmlContent, globalCssContent, globalJsContent, globalCssAssetNames, globalJsAssetNames]
+    )
+
+    useEffect(() => {
+        try {
+            const storedCssAutoSync = localStorage.getItem(GLOBAL_CSS_AUTO_SYNC_KEY)
+            if (storedCssAutoSync !== null) {
+                setCssAutoSync(storedCssAutoSync === 'true')
+            }
+
+            const storedJsAutoSync = localStorage.getItem(GLOBAL_JS_AUTO_SYNC_KEY)
+            if (storedJsAutoSync !== null) {
+                setJsAutoSync(storedJsAutoSync === 'true')
+            }
+        } catch (err) {
+            console.error('Failed to load global asset auto-sync preferences:', err)
+        }
+    }, [])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(GLOBAL_CSS_AUTO_SYNC_KEY, String(cssAutoSync))
+        } catch (err) {
+            console.error('Failed to save CSS auto-sync preference:', err)
+        }
+    }, [cssAutoSync])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(GLOBAL_JS_AUTO_SYNC_KEY, String(jsAutoSync))
+        } catch (err) {
+            console.error('Failed to save JS auto-sync preference:', err)
+        }
+    }, [jsAutoSync])
+
     // Load editor configuration from storage
     useEffect(() => {
         if (editorStorageLoaded && editorId) {
@@ -166,11 +256,7 @@ export default function DocifyEditorPage() {
                     (await manifestResponse.json()) as GlobalAssetsManifestResponse
                 const manifestAssets = manifestPayload.assets ?? []
                 setManifestAssets(manifestAssets)
-
-                const cssAssets: Array<{ src: string; type: 'css'; content: string }> = []
-                const jsAssets: Array<{ src: string; type: 'js'; content: string }> = []
-                const cssAssetNames: string[] = []
-                const jsAssetNames: string[] = []
+                const nextAssetContentBySrc: Record<string, string> = {}
 
                 for (const asset of manifestAssets) {
                     if (asset.type !== 'css' && asset.type !== 'js') {
@@ -199,28 +285,16 @@ export default function DocifyEditorPage() {
                         }
 
                         const content = await response.text()
-                        if (asset.type === 'css') {
-                            cssAssets.push({ src: asset.src, type: 'css', content })
-                            cssAssetNames.push(asset.name || asset.src)
-                        } else {
-                            jsAssets.push({ src: asset.src, type: 'js', content })
-                            jsAssetNames.push(asset.name || asset.src)
-                        }
+                        nextAssetContentBySrc[asset.src] = content
                     } catch (err) {
                         console.error(`Failed to load asset ${asset.src}:`, err)
                     }
                 }
 
-                setGlobalCssContent(combineGlobalCssAssets(cssAssets))
-                setGlobalCssAssetNames(cssAssetNames)
-                setGlobalJsContent(combineGlobalJsAssets(jsAssets))
-                setGlobalJsAssetNames(jsAssetNames)
+                setAssetContentBySrc(nextAssetContentBySrc)
             } catch (err) {
                 console.error('Failed to load global assets:', err)
-                setGlobalCssContent('')
-                setGlobalCssAssetNames([])
-                setGlobalJsContent('')
-                setGlobalJsAssetNames([])
+                setAssetContentBySrc({})
             }
         }
 
@@ -417,7 +491,7 @@ export default function DocifyEditorPage() {
     }, [template])
 
     useEffect(() => {
-        setHtmlContent(initialHtmlContent)
+        setHtmlContent(maskInjectedGlobalAssetsForEditing(initialHtmlContent))
     }, [initialHtmlContent])
 
     // Extract variables from HTML content and merge with existing variables
@@ -524,7 +598,7 @@ export default function DocifyEditorPage() {
                     templateId: template.id,
                     data: {
                         ...template,
-                        htmlContent,
+                        htmlContent: htmlContentWithInjectedGlobalAssets,
                     },
                 },
                 editor
@@ -534,7 +608,7 @@ export default function DocifyEditorPage() {
             const message = err instanceof Error ? err.message : 'Failed to push HTML'
             toast.error(message)
         }
-    }, [editor, template, htmlContent])
+    }, [editor, template, htmlContentWithInjectedGlobalAssets])
 
     const handleSyncMetadata = useCallback(async () => {
         if (!editor || !template) {
@@ -576,7 +650,7 @@ export default function DocifyEditorPage() {
                     expiry,
                     template: {
                         ...storedTemplate,
-                        htmlContent: htmlContent,
+                        htmlContent: htmlContentWithInjectedGlobalAssets,
                         sampleJsonData: variablesContent,
                         pageSettings,
                     },
@@ -587,7 +661,7 @@ export default function DocifyEditorPage() {
                 console.error('Failed to sync HTML to localStorage:', err)
             }
         }
-    }, [htmlContent, variablesContent, pageSettings, templateId, template, isLoadingTemplate, isLoadingHtml])
+    }, [htmlContentWithInjectedGlobalAssets, variablesContent, pageSettings, templateId, template, isLoadingTemplate, isLoadingHtml])
 
     if (isLoadingTemplate || isLoadingHtml) {
         return (
@@ -630,6 +704,7 @@ export default function DocifyEditorPage() {
                 <DocifyEditorTabs
                     currentEditor={normalizedEditorTab}
                     htmlContent={htmlContent}
+                    downloadHtmlContent={htmlContentWithInjectedGlobalAssets}
                     globalCssContent={globalCssContent}
                     globalCssAssetNames={globalCssAssetNames}
                     globalJsContent={globalJsContent}

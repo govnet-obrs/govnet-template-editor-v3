@@ -23,6 +23,14 @@ const GLOBAL_JS_SCRIPT_BLOCK_REGEX = new RegExp(
   `<script[^>]*${GLOBAL_JS_SCRIPT_ATTR}=["'][^"']*["'][^>]*>[\\s\\S]*?<\\/script>`,
   'gi'
 )
+const GLOBAL_CSS_STYLE_BLOCK_WITH_CAPTURE_REGEX = new RegExp(
+  `(<style[^>]*${GLOBAL_CSS_STYLE_ATTR}=["'][^"']*["'][^>]*>)[\\s\\S]*?(<\\/style>)`,
+  'gi'
+)
+const GLOBAL_JS_SCRIPT_BLOCK_WITH_CAPTURE_REGEX = new RegExp(
+  `(<script[^>]*${GLOBAL_JS_SCRIPT_ATTR}=["'][^"']*["'][^>]*>)[\\s\\S]*?(<\\/script>)`,
+  'gi'
+)
 
 export interface GlobalAssetContent {
   src: string
@@ -161,6 +169,22 @@ export const stripInjectedGlobalJs = (html: string): string => {
 
 export const stripInjectedGlobalAssets = (html: string): string => {
   return stripInjectedGlobalJs(stripInjectedGlobalCss(html)).trim()
+}
+
+export const maskInjectedGlobalAssetsForEditing = (html: string): string => {
+  const maskedCss = html.replace(
+    GLOBAL_CSS_STYLE_BLOCK_WITH_CAPTURE_REGEX,
+    (_match, openTag: string, closeTag: string) => {
+      return `${openTag}\n/* this content is auto injected. */\n${closeTag}`
+    }
+  )
+
+  return maskedCss.replace(
+    GLOBAL_JS_SCRIPT_BLOCK_WITH_CAPTURE_REGEX,
+    (_match, openTag: string, closeTag: string) => {
+      return `${openTag}\n/* this content is auto injected. */\n${closeTag}`
+    }
+  )
 }
 
 const buildInjectedAssetNamesAttr = (assetNames: string[]): string => {

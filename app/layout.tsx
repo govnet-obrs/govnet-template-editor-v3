@@ -9,8 +9,8 @@ const notoSans = Noto_Sans({variable:'--font-sans'});
 const nunitoSans = Nunito_Sans({ subsets: ['latin'], variable: '--font-nunito-sans' })
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'OBRS Go Template Editor',
+  description: 'Go template editor for OBRS with live preview and asset management',
   generator: 'v0.app',
 }
 

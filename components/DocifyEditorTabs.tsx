@@ -19,6 +19,7 @@ import { DocifyPreviewPanel } from '@/components/DocifyPreviewPanel'
 interface DocifyEditorTabsProps {
     currentEditor: string
     htmlContent: string
+    downloadHtmlContent?: string
     globalCssContent: string
     globalCssAssetNames: string[]
     globalJsContent: string
@@ -49,6 +50,7 @@ interface DocifyEditorTabsProps {
 export function DocifyEditorTabs({
     currentEditor,
     htmlContent,
+    downloadHtmlContent,
     globalCssContent,
     globalCssAssetNames,
     globalJsContent,
@@ -132,6 +134,7 @@ export function DocifyEditorTabs({
                     <TabsContent value="code" className="flex-1 flex-col overflow-hidden flex h-full">
                         <HtmlEditor
                             htmlContent={htmlContent}
+                            downloadHtmlContent={downloadHtmlContent}
                             onHtmlChange={onHtmlChange}
                             zoom={zoom}
                             onPushHtml={onPushHtml}
