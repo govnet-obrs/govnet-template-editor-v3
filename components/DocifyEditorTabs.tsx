@@ -143,6 +143,7 @@ export function DocifyEditorTabs({
                             zoom={zoom}
                             onPushHtml={onPushHtml}
                             onDownloadHtml={onDownloadHtml}
+                            globalAssetNames={globalCssAssetNames.concat(globalJsAssetNames)}
                         />
                     </TabsContent>
                     <TabsContent
