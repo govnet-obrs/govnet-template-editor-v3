@@ -16,11 +16,11 @@ export interface ManifestFile {
 const GLOBAL_CSS_STYLE_ATTR = 'data-docify-global-css'
 const GLOBAL_JS_SCRIPT_ATTR = 'data-docify-global-js'
 const GLOBAL_CSS_STYLE_BLOCK_REGEX = new RegExp(
-  `<style[^>]*${GLOBAL_CSS_STYLE_ATTR}=["']true["'][^>]*>[\\s\\S]*?<\\/style>`,
+  `<style[^>]*${GLOBAL_CSS_STYLE_ATTR}=["'][^"']*["'][^>]*>[\\s\\S]*?<\\/style>`,
   'gi'
 )
 const GLOBAL_JS_SCRIPT_BLOCK_REGEX = new RegExp(
-  `<script[^>]*${GLOBAL_JS_SCRIPT_ATTR}=["']true["'][^>]*>[\\s\\S]*?<\\/script>`,
+  `<script[^>]*${GLOBAL_JS_SCRIPT_ATTR}=["'][^"']*["'][^>]*>[\\s\\S]*?<\\/script>`,
   'gi'
 )
 
@@ -160,14 +160,27 @@ export const stripInjectedGlobalAssets = (html: string): string => {
   return stripInjectedGlobalJs(stripInjectedGlobalCss(html)).trim()
 }
 
-export const injectGlobalCssIntoHtml = (html: string, cssContent: string): string => {
+const buildInjectedAssetNamesAttr = (assetNames: string[]): string => {
+  const normalized = assetNames
+    .map((name) => name.trim().replace(/,/g, '_'))
+    .filter(Boolean)
+
+  return normalized.length > 0 ? normalized.join(',') : 'inline'
+}
+
+export const injectGlobalCssIntoHtml = (
+  html: string,
+  cssContent: string,
+  assetNames: string[] = []
+): string => {
   const baseHtml = stripInjectedGlobalCss(html)
   const normalizedCss = cssContent.trim()
   if (!normalizedCss) {
     return baseHtml
   }
 
-  const styleTag = `<style ${GLOBAL_CSS_STYLE_ATTR}="true">\n${normalizedCss}\n</style>`
+  const injectedAssetNames = buildInjectedAssetNamesAttr(assetNames)
+  const styleTag = `<style ${GLOBAL_CSS_STYLE_ATTR}="${injectedAssetNames}">\n${normalizedCss}\n</style>`
   if (/<head[^>]*>/i.test(baseHtml)) {
     return baseHtml.replace(/<head[^>]*>/i, (match) => `${match}\n${styleTag}`)
   }
@@ -179,14 +192,19 @@ export const injectGlobalCssIntoHtml = (html: string, cssContent: string): strin
   return `${styleTag}\n${baseHtml}`.trim()
 }
 
-export const injectGlobalJsIntoHtml = (html: string, jsContent: string): string => {
+export const injectGlobalJsIntoHtml = (
+  html: string,
+  jsContent: string,
+  assetNames: string[] = []
+): string => {
   const baseHtml = stripInjectedGlobalJs(html)
   const normalizedJs = jsContent.trim()
   if (!normalizedJs) {
     return baseHtml
   }
 
-  const scriptTag = `<script ${GLOBAL_JS_SCRIPT_ATTR}="true">\n${normalizedJs}\n</script>`
+  const injectedAssetNames = buildInjectedAssetNamesAttr(assetNames)
+  const scriptTag = `<script ${GLOBAL_JS_SCRIPT_ATTR}="${injectedAssetNames}">\n${normalizedJs}\n</script>`
   
   if (/<\/body[^>]*>/i.test(baseHtml)) {
     return baseHtml.replace(/<\/body[^>]*>/i, (match) => `${scriptTag}\n${match}`)
@@ -199,13 +217,19 @@ export const injectGlobalJsIntoHtml = (html: string, jsContent: string): string 
   return `${baseHtml}\n${scriptTag}`.trim()
 }
 
-export const injectGlobalAssetsIntoHtml = (html: string, cssContent: string, jsContent: string): string => {
+export const injectGlobalAssetsIntoHtml = (
+  html: string,
+  cssContent: string,
+  jsContent: string,
+  cssAssetNames: string[] = [],
+  jsAssetNames: string[] = []
+): string => {
   let result = html
   if (cssContent.trim()) {
-    result = injectGlobalCssIntoHtml(result, cssContent)
+    result = injectGlobalCssIntoHtml(result, cssContent, cssAssetNames)
   }
   if (jsContent.trim()) {
-    result = injectGlobalJsIntoHtml(result, jsContent)
+    result = injectGlobalJsIntoHtml(result, jsContent, jsAssetNames)
   }
   return result
 }

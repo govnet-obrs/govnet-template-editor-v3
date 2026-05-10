@@ -1,4 +1,5 @@
-import { Code, Settings, Variable } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Code, Settings, Variable, FileCode2 } from 'lucide-react'
 import { HtmlEditor } from '@/components/HtmlEditor'
 import { VariableEditor } from '@/components/VariableEditor'
 import { SettingsEditor, type PageSettings } from '@/components/SettingsEditor'
@@ -19,7 +20,9 @@ interface DocifyEditorTabsProps {
     currentEditor: string
     htmlContent: string
     globalCssContent: string
+    globalCssAssetNames: string[]
     globalJsContent: string
+    globalJsAssetNames: string[]
     variablesContent: string
     pageSettings: PageSettings
     previewMode: 'html' | 'pdf' | 'local'
@@ -39,13 +42,16 @@ interface DocifyEditorTabsProps {
     onVariablesChange: (value: string) => void
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
     onPreviewEndpointChange: (endpoint: string) => void
+    globalAssetsEditor?: ReactNode
 }
 
 export function DocifyEditorTabs({
     currentEditor,
     htmlContent,
     globalCssContent,
+    globalCssAssetNames,
     globalJsContent,
+    globalJsAssetNames,
     variablesContent,
     pageSettings,
     previewMode,
@@ -65,6 +71,7 @@ export function DocifyEditorTabs({
     onVariablesChange,
     onPreviewModeChange,
     onPreviewEndpointChange,
+    globalAssetsEditor,
 }: DocifyEditorTabsProps) {
     return (
         <Tabs
@@ -98,6 +105,15 @@ export function DocifyEditorTabs({
                 >
                     <Settings className="h-10 w-10" />
                 </TabsTrigger>
+                {globalAssetsEditor && (
+                    <TabsTrigger
+                        value="global-assets"
+                        title="Global Assets"
+                        className="w-full cursor-pointer hover:bg-accent"
+                    >
+                        <FileCode2 className="h-10 w-10" />
+                    </TabsTrigger>
+                )}
             </TabsList>
 
             <ResizablePanelGroup orientation="horizontal" className="flex-1 w-full">
@@ -131,6 +147,14 @@ export function DocifyEditorTabs({
                             onSyncMetadata={onSyncMetadata}
                         />
                     </TabsContent>
+                    {globalAssetsEditor && (
+                        <TabsContent
+                            value="global-assets"
+                            className="flex-1 flex-col overflow-hidden flex h-full"
+                        >
+                            {globalAssetsEditor}
+                        </TabsContent>
+                    )}
                 </ResizablePanel>
 
                 <ResizableHandle />
@@ -139,7 +163,9 @@ export function DocifyEditorTabs({
                     <DocifyPreviewPanel
                         htmlContent={htmlContent}
                         globalCssContent={globalCssContent}
+                        globalCssAssetNames={globalCssAssetNames}
                         globalJsContent={globalJsContent}
+                        globalJsAssetNames={globalJsAssetNames}
                         pageSettings={pageSettings}
                         previewMode={previewMode}
                         onPreviewModeChange={onPreviewModeChange}

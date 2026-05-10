@@ -10,12 +10,14 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import type { PageSettings } from '@/components/SettingsEditor'
-import { injectGlobalAssetsIntoHtml } from '@/lib/docify-global-css'
+import { injectGlobalAssetsIntoHtml } from '@/lib/docify-global-assets'
 
 interface DocifyPreviewPanelProps {
     htmlContent: string
     globalCssContent: string
+    globalCssAssetNames: string[]
     globalJsContent: string
+    globalJsAssetNames: string[]
     pageSettings: PageSettings
     previewMode: 'html' | 'pdf' | 'local'
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
@@ -32,7 +34,9 @@ interface DocifyPreviewPanelProps {
 export function DocifyPreviewPanel({
     htmlContent,
     globalCssContent,
+    globalCssAssetNames,
     globalJsContent,
+    globalJsAssetNames,
     pageSettings,
     previewMode,
     onPreviewModeChange,
@@ -145,11 +149,23 @@ export function DocifyPreviewPanel({
                     templateName,
                     description,
                     data: dataPayload,
-                    templateContent: injectGlobalAssetsIntoHtml(htmlContent, globalCssContent, globalJsContent),
+                    templateContent: injectGlobalAssetsIntoHtml(
+                        htmlContent,
+                        globalCssContent,
+                        globalJsContent,
+                        globalCssAssetNames,
+                        globalJsAssetNames
+                    ),
                     pageSettings,
                 }
                 : {
-                    html: injectGlobalAssetsIntoHtml(htmlContent, globalCssContent, globalJsContent),
+                    html: injectGlobalAssetsIntoHtml(
+                        htmlContent,
+                        globalCssContent,
+                        globalJsContent,
+                        globalCssAssetNames,
+                        globalJsAssetNames
+                    ),
                     sampleData: dataPayload,
                     pageSettings,
                 }
@@ -195,7 +211,7 @@ export function DocifyPreviewPanel({
                 setIsGeneratingLocalPdf(false)
             }
         }
-    }, [apiUrl, localPreviewUrl, selectedPreviewEndpoint, templateName, description, htmlContent, globalCssContent, globalJsContent, pageSettings, parseSampleData, getResponseError, revokePdfUrl])
+    }, [apiUrl, localPreviewUrl, selectedPreviewEndpoint, templateName, description, htmlContent, globalCssContent, globalCssAssetNames, globalJsContent, globalJsAssetNames, pageSettings, parseSampleData, getResponseError, revokePdfUrl])
 
     const handleGeneratePdf = useCallback(async () => {
         await generatePdfForMode('pdf')

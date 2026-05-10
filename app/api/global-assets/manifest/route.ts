@@ -5,7 +5,7 @@ import {
   buildGlobalAssetApiPath,
   isRemoteManifestSrc,
   normalizeManifestAssets,
-} from '@/lib/docify-global-css'
+} from '@/lib/docify-global-assets'
 
 export async function GET() {
   try {

@@ -15,7 +15,7 @@ import {
     combineGlobalCssAssets,
     combineGlobalJsAssets,
     type ManifestAsset,
-} from '@/lib/docify-global-css'
+} from '@/lib/docify-global-assets'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
 import { DEFAULT_PREVIEW_ENDPOINTS } from '@/lib/editor-types'
@@ -70,7 +70,9 @@ export default function DocifyEditorPage() {
     const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
     const [zoom] = useState(100)
     const [globalCssContent, setGlobalCssContent] = useState('')
+    const [globalCssAssetNames, setGlobalCssAssetNames] = useState<string[]>([])
     const [globalJsContent, setGlobalJsContent] = useState('')
+    const [globalJsAssetNames, setGlobalJsAssetNames] = useState<string[]>([])
     const [selectedPreviewEndpoint, setSelectedPreviewEndpoint] = useState<string>(
         DEFAULT_PREVIEW_ENDPOINTS[0]
     )
@@ -109,6 +111,8 @@ export default function DocifyEditorPage() {
 
                 const cssAssets: Array<{ src: string; type: 'css'; content: string }> = []
                 const jsAssets: Array<{ src: string; type: 'js'; content: string }> = []
+                const cssAssetNames: string[] = []
+                const jsAssetNames: string[] = []
 
                 for (const asset of manifestAssets) {
                     if (asset.type !== 'css' && asset.type !== 'js') {
@@ -139,8 +143,10 @@ export default function DocifyEditorPage() {
                         const content = await response.text()
                         if (asset.type === 'css') {
                             cssAssets.push({ src: asset.src, type: 'css', content })
+                            cssAssetNames.push(asset.name || asset.src)
                         } else {
                             jsAssets.push({ src: asset.src, type: 'js', content })
+                            jsAssetNames.push(asset.name || asset.src)
                         }
                     } catch (err) {
                         console.error(`Failed to load asset ${asset.src}:`, err)
@@ -148,11 +154,15 @@ export default function DocifyEditorPage() {
                 }
 
                 setGlobalCssContent(combineGlobalCssAssets(cssAssets))
+                setGlobalCssAssetNames(cssAssetNames)
                 setGlobalJsContent(combineGlobalJsAssets(jsAssets))
+                setGlobalJsAssetNames(jsAssetNames)
             } catch (err) {
                 console.error('Failed to load global assets:', err)
                 setGlobalCssContent('')
+                setGlobalCssAssetNames([])
                 setGlobalJsContent('')
+                setGlobalJsAssetNames([])
             }
         }
 
@@ -414,7 +424,9 @@ export default function DocifyEditorPage() {
                     currentEditor={currentEditor}
                     htmlContent={htmlContent}
                     globalCssContent={globalCssContent}
+                    globalCssAssetNames={globalCssAssetNames}
                     globalJsContent={globalJsContent}
+                    globalJsAssetNames={globalJsAssetNames}
                     variablesContent={variablesContent}
                     pageSettings={pageSettings}
                     previewMode={previewMode}
