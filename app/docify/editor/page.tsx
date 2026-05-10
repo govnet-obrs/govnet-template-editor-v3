@@ -1,8 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import Editor from '@monaco-editor/react'
+import { useTheme } from 'next-themes'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useEditorStorage } from '@/hooks/useEditorStorage'
 import { useTemplateSync } from '@/hooks/useTemplateSync'
 import { DocifyEditorHeader } from '../../../components/DocifyEditorHeader'
@@ -14,6 +18,9 @@ import {
     buildGlobalAssetApiPath,
     combineGlobalCssAssets,
     combineGlobalJsAssets,
+    INJECTED_GLOBAL_CSS_ATTR,
+    INJECTED_GLOBAL_JS_ATTR,
+    parseInjectedAssetNamesFromHtml,
     type ManifestAsset,
 } from '@/lib/docify-global-assets'
 import { toast } from 'sonner'
@@ -46,11 +53,14 @@ interface GlobalAssetsManifestResponse {
     assets: Array<ManifestAsset & { url: string }>
 }
 
+type AssetSyncStatus = 'idle' | 'syncing' | 'saved' | 'error'
+
 export default function DocifyEditorPage() {
     // Max size for cacheable CSS/JS assets (1MB)
     const MAX_CACHEABLE_ASSET_SIZE = 1024 * 1024
 
     const router = useRouter()
+    const { resolvedTheme } = useTheme()
     const searchParams = useSearchParams()
     const editorId = searchParams.get('editorId')
     const templateId = searchParams.get('templateId')
@@ -73,8 +83,55 @@ export default function DocifyEditorPage() {
     const [globalCssAssetNames, setGlobalCssAssetNames] = useState<string[]>([])
     const [globalJsContent, setGlobalJsContent] = useState('')
     const [globalJsAssetNames, setGlobalJsAssetNames] = useState<string[]>([])
+    const [manifestAssets, setManifestAssets] = useState<Array<ManifestAsset & { url: string }>>([])
+    const [selectedCssAssetSrc, setSelectedCssAssetSrc] = useState('')
+    const [selectedJsAssetSrc, setSelectedJsAssetSrc] = useState('')
+    const [cssEditorContent, setCssEditorContent] = useState('')
+    const [jsEditorContent, setJsEditorContent] = useState('')
+    const [cssAutoSync, setCssAutoSync] = useState(false)
+    const [jsAutoSync, setJsAutoSync] = useState(false)
+    const [cssSyncStatus, setCssSyncStatus] = useState<AssetSyncStatus>('idle')
+    const [jsSyncStatus, setJsSyncStatus] = useState<AssetSyncStatus>('idle')
+    const [cssSyncMessage, setCssSyncMessage] = useState('')
+    const [jsSyncMessage, setJsSyncMessage] = useState('')
+    const [cssDirty, setCssDirty] = useState(false)
+    const [jsDirty, setJsDirty] = useState(false)
     const [selectedPreviewEndpoint, setSelectedPreviewEndpoint] = useState<string>(
         DEFAULT_PREVIEW_ENDPOINTS[0]
+    )
+
+    const templateCssAssetNames = useMemo(
+        () => parseInjectedAssetNamesFromHtml(htmlContent || initialHtmlContent, INJECTED_GLOBAL_CSS_ATTR),
+        [htmlContent, initialHtmlContent]
+    )
+    const templateJsAssetNames = useMemo(
+        () => parseInjectedAssetNamesFromHtml(htmlContent || initialHtmlContent, INJECTED_GLOBAL_JS_ATTR),
+        [htmlContent, initialHtmlContent]
+    )
+    const normalizedEditorTab = useMemo(() => {
+        if (currentEditor === 'global-assets') {
+            return 'global-assets-css'
+        }
+        return currentEditor
+    }, [currentEditor])
+
+    const cssAssetsInTemplate = useMemo(
+        () =>
+            manifestAssets.filter(
+                (asset) =>
+                    asset.type === 'css' &&
+                    templateCssAssetNames.some((name) => name.toLowerCase() === asset.name.toLowerCase())
+            ),
+        [manifestAssets, templateCssAssetNames]
+    )
+    const jsAssetsInTemplate = useMemo(
+        () =>
+            manifestAssets.filter(
+                (asset) =>
+                    asset.type === 'js' &&
+                    templateJsAssetNames.some((name) => name.toLowerCase() === asset.name.toLowerCase())
+            ),
+        [manifestAssets, templateJsAssetNames]
     )
 
     // Load editor configuration from storage
@@ -108,6 +165,7 @@ export default function DocifyEditorPage() {
                 const manifestPayload =
                     (await manifestResponse.json()) as GlobalAssetsManifestResponse
                 const manifestAssets = manifestPayload.assets ?? []
+                setManifestAssets(manifestAssets)
 
                 const cssAssets: Array<{ src: string; type: 'css'; content: string }> = []
                 const jsAssets: Array<{ src: string; type: 'js'; content: string }> = []
@@ -168,6 +226,153 @@ export default function DocifyEditorPage() {
 
         loadAssets()
     }, [MAX_CACHEABLE_ASSET_SIZE])
+
+    useEffect(() => {
+        if (!selectedCssAssetSrc && cssAssetsInTemplate.length > 0) {
+            setSelectedCssAssetSrc(cssAssetsInTemplate[0].src)
+        }
+    }, [cssAssetsInTemplate, selectedCssAssetSrc])
+
+    useEffect(() => {
+        if (!selectedJsAssetSrc && jsAssetsInTemplate.length > 0) {
+            setSelectedJsAssetSrc(jsAssetsInTemplate[0].src)
+        }
+    }, [jsAssetsInTemplate, selectedJsAssetSrc])
+
+    const loadAssetEditorContent = useCallback(
+        async (assetSrc: string, type: 'css' | 'js') => {
+            if (!assetSrc) {
+                if (type === 'css') {
+                    setCssEditorContent('')
+                    setCssDirty(false)
+                } else {
+                    setJsEditorContent('')
+                    setJsDirty(false)
+                }
+                return
+            }
+
+            const asset = manifestAssets.find((entry) => entry.src === assetSrc)
+            if (!asset || /^https?:\/\//i.test(asset.src)) {
+                return
+            }
+
+            try {
+                const response = await fetch(asset.url, { cache: 'no-store' })
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${asset.src}`)
+                }
+                const content = await response.text()
+                if (type === 'css') {
+                    setCssEditorContent(content)
+                    setCssDirty(false)
+                } else {
+                    setJsEditorContent(content)
+                    setJsDirty(false)
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : `Failed to load ${assetSrc}`
+                if (type === 'css') {
+                    setCssSyncStatus('error')
+                    setCssSyncMessage(message)
+                } else {
+                    setJsSyncStatus('error')
+                    setJsSyncMessage(message)
+                }
+            }
+        },
+        [manifestAssets]
+    )
+
+    useEffect(() => {
+        if (selectedCssAssetSrc) {
+            void loadAssetEditorContent(selectedCssAssetSrc, 'css')
+        }
+    }, [selectedCssAssetSrc, loadAssetEditorContent])
+
+    useEffect(() => {
+        if (selectedJsAssetSrc) {
+            void loadAssetEditorContent(selectedJsAssetSrc, 'js')
+        }
+    }, [selectedJsAssetSrc, loadAssetEditorContent])
+
+    const syncAssetContent = useCallback(
+        async (type: 'css' | 'js') => {
+            const selectedSrc = type === 'css' ? selectedCssAssetSrc : selectedJsAssetSrc
+            const content = type === 'css' ? cssEditorContent : jsEditorContent
+
+            if (!selectedSrc) {
+                return
+            }
+
+            if (type === 'css') {
+                setCssSyncStatus('syncing')
+                setCssSyncMessage('Syncing...')
+            } else {
+                setJsSyncStatus('syncing')
+                setJsSyncMessage('Syncing...')
+            }
+
+            try {
+                const response = await fetch('/api/global-assets/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ src: selectedSrc, type, content }),
+                })
+
+                if (!response.ok) {
+                    const payload = (await response.json()) as { error?: string }
+                    throw new Error(payload.error || 'Sync failed')
+                }
+
+                if (type === 'css') {
+                    setCssSyncStatus('saved')
+                    setCssSyncMessage('Synced')
+                    setCssDirty(false)
+                } else {
+                    setJsSyncStatus('saved')
+                    setJsSyncMessage('Synced')
+                    setJsDirty(false)
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'Sync failed'
+                if (type === 'css') {
+                    setCssSyncStatus('error')
+                    setCssSyncMessage(message)
+                } else {
+                    setJsSyncStatus('error')
+                    setJsSyncMessage(message)
+                }
+            }
+        },
+        [selectedCssAssetSrc, selectedJsAssetSrc, cssEditorContent, jsEditorContent]
+    )
+
+    useEffect(() => {
+        if (!cssAutoSync || !cssDirty || !selectedCssAssetSrc) {
+            return
+        }
+
+        const timeout = setTimeout(() => {
+            void syncAssetContent('css')
+        }, 800)
+
+        return () => clearTimeout(timeout)
+    }, [cssAutoSync, cssDirty, selectedCssAssetSrc, cssEditorContent, syncAssetContent])
+
+    useEffect(() => {
+        if (!jsAutoSync || !jsDirty || !selectedJsAssetSrc) {
+            return
+        }
+
+        const timeout = setTimeout(() => {
+            void syncAssetContent('js')
+        }, 800)
+
+        return () => clearTimeout(timeout)
+    }, [jsAutoSync, jsDirty, selectedJsAssetSrc, jsEditorContent, syncAssetContent])
 
     // Load template from localStorage
     useEffect(() => {
@@ -407,6 +612,8 @@ export default function DocifyEditorPage() {
         )
     }
 
+    const editorTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'vs'
+
     return (
         <main className="min-h-screen bg-background flex flex-col">
             <DocifyEditorHeader
@@ -421,7 +628,7 @@ export default function DocifyEditorPage() {
 
             <div className="flex-1 flex overflow-hidden">
                 <DocifyEditorTabs
-                    currentEditor={currentEditor}
+                    currentEditor={normalizedEditorTab}
                     htmlContent={htmlContent}
                     globalCssContent={globalCssContent}
                     globalCssAssetNames={globalCssAssetNames}
@@ -446,6 +653,180 @@ export default function DocifyEditorPage() {
                     onHtmlChange={handleHtmlChange}
                     onVariablesChange={handleVariablesChange}
                     onPreviewModeChange={setPreviewMode}
+                    globalCssAssetsEditor={
+                        <div className="flex h-full flex-col gap-4 p-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <Label className="text-sm font-medium">Global CSS Editor</Label>
+                                <div className="flex items-center gap-2 text-xs">
+                                    <label className="flex items-center gap-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={cssAutoSync}
+                                            onChange={(event) => setCssAutoSync(event.target.checked)}
+                                            disabled={cssAssetsInTemplate.length === 0}
+                                        />
+                                        Auto sync
+                                    </label>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => void syncAssetContent('css')}
+                                        disabled={
+                                            cssAssetsInTemplate.length === 0 ||
+                                            !selectedCssAssetSrc ||
+                                            cssSyncStatus === 'syncing'
+                                        }
+                                    >
+                                        {cssSyncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <Select
+                                value={selectedCssAssetSrc}
+                                onValueChange={(value) => setSelectedCssAssetSrc(value || '')}
+                            >
+                                <SelectTrigger disabled={cssAssetsInTemplate.length === 0}>
+                                    <SelectValue placeholder="Select CSS asset from template attrs" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {cssAssetsInTemplate.map((asset) => (
+                                        <SelectItem key={asset.src} value={asset.src}>
+                                            {asset.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <div className="flex-1 overflow-hidden rounded border border-border">
+                                <Editor
+                                    height="100%"
+                                    defaultLanguage="css"
+                                    language="css"
+                                    value={cssEditorContent}
+                                    onChange={(value) => {
+                                        setCssEditorContent(value || '')
+                                        setCssDirty(true)
+                                    }}
+                                    theme={editorTheme}
+                                    options={{
+                                        minimap: { enabled: false },
+                                        scrollBeyondLastLine: false,
+                                        fontSize: 13,
+                                        lineNumbers: 'on',
+                                        wordWrap: 'on',
+                                        automaticLayout: true,
+                                        readOnly: cssAssetsInTemplate.length === 0 || !selectedCssAssetSrc,
+                                    }}
+                                />
+                            </div>
+
+                            {cssAssetsInTemplate.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    No CSS global assets referenced in template attributes.
+                                </p>
+                            ) : (
+                                cssSyncMessage && (
+                                    <p
+                                        className={`text-xs ${
+                                            cssSyncStatus === 'error'
+                                                ? 'text-destructive'
+                                                : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        {cssSyncMessage}
+                                    </p>
+                                )
+                            )}
+                        </div>
+                    }
+                    globalJsAssetsEditor={
+                        <div className="flex h-full flex-col gap-4 p-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <Label className="text-sm font-medium">Global JavaScript Editor</Label>
+                                <div className="flex items-center gap-2 text-xs">
+                                    <label className="flex items-center gap-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={jsAutoSync}
+                                            onChange={(event) => setJsAutoSync(event.target.checked)}
+                                            disabled={jsAssetsInTemplate.length === 0}
+                                        />
+                                        Auto sync
+                                    </label>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => void syncAssetContent('js')}
+                                        disabled={
+                                            jsAssetsInTemplate.length === 0 ||
+                                            !selectedJsAssetSrc ||
+                                            jsSyncStatus === 'syncing'
+                                        }
+                                    >
+                                        {jsSyncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <Select
+                                value={selectedJsAssetSrc}
+                                onValueChange={(value) => setSelectedJsAssetSrc(value || '')}
+                            >
+                                <SelectTrigger disabled={jsAssetsInTemplate.length === 0}>
+                                    <SelectValue placeholder="Select JavaScript asset from template attrs" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {jsAssetsInTemplate.map((asset) => (
+                                        <SelectItem key={asset.src} value={asset.src}>
+                                            {asset.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <div className="flex-1 overflow-hidden rounded border border-border">
+                                <Editor
+                                    height="100%"
+                                    defaultLanguage="javascript"
+                                    language="javascript"
+                                    value={jsEditorContent}
+                                    onChange={(value) => {
+                                        setJsEditorContent(value || '')
+                                        setJsDirty(true)
+                                    }}
+                                    theme={editorTheme}
+                                    options={{
+                                        minimap: { enabled: false },
+                                        scrollBeyondLastLine: false,
+                                        fontSize: 13,
+                                        lineNumbers: 'on',
+                                        wordWrap: 'on',
+                                        automaticLayout: true,
+                                        readOnly: jsAssetsInTemplate.length === 0 || !selectedJsAssetSrc,
+                                    }}
+                                />
+                            </div>
+
+                            {jsAssetsInTemplate.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    No JavaScript global assets referenced in template attributes.
+                                </p>
+                            ) : (
+                                jsSyncMessage && (
+                                    <p
+                                        className={`text-xs ${
+                                            jsSyncStatus === 'error'
+                                                ? 'text-destructive'
+                                                : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        {jsSyncMessage}
+                                    </p>
+                                )
+                            )}
+                        </div>
+                    }
                 />
             </div>
         </main>

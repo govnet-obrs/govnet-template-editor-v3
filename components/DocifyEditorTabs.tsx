@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Code, Settings, Variable, FileCode2 } from 'lucide-react'
+import { Code, Settings, Variable, FileCode2, Braces } from 'lucide-react'
 import { HtmlEditor } from '@/components/HtmlEditor'
 import { VariableEditor } from '@/components/VariableEditor'
 import { SettingsEditor, type PageSettings } from '@/components/SettingsEditor'
@@ -42,7 +42,8 @@ interface DocifyEditorTabsProps {
     onVariablesChange: (value: string) => void
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
     onPreviewEndpointChange: (endpoint: string) => void
-    globalAssetsEditor?: ReactNode
+    globalCssAssetsEditor?: ReactNode
+    globalJsAssetsEditor?: ReactNode
 }
 
 export function DocifyEditorTabs({
@@ -71,7 +72,8 @@ export function DocifyEditorTabs({
     onVariablesChange,
     onPreviewModeChange,
     onPreviewEndpointChange,
-    globalAssetsEditor,
+    globalCssAssetsEditor,
+    globalJsAssetsEditor,
 }: DocifyEditorTabsProps) {
     return (
         <Tabs
@@ -105,13 +107,22 @@ export function DocifyEditorTabs({
                 >
                     <Settings className="h-10 w-10" />
                 </TabsTrigger>
-                {globalAssetsEditor && (
+                {globalCssAssetsEditor && (
                     <TabsTrigger
-                        value="global-assets"
-                        title="Global Assets"
+                        value="global-assets-css"
+                        title="Global CSS Assets"
                         className="w-full cursor-pointer hover:bg-accent"
                     >
                         <FileCode2 className="h-10 w-10" />
+                    </TabsTrigger>
+                )}
+                {globalJsAssetsEditor && (
+                    <TabsTrigger
+                        value="global-assets-js"
+                        title="Global JavaScript Assets"
+                        className="w-full cursor-pointer hover:bg-accent"
+                    >
+                        <Braces className="h-10 w-10" />
                     </TabsTrigger>
                 )}
             </TabsList>
@@ -147,12 +158,20 @@ export function DocifyEditorTabs({
                             onSyncMetadata={onSyncMetadata}
                         />
                     </TabsContent>
-                    {globalAssetsEditor && (
+                    {globalCssAssetsEditor && (
                         <TabsContent
-                            value="global-assets"
+                            value="global-assets-css"
                             className="flex-1 flex-col overflow-hidden flex h-full"
                         >
-                            {globalAssetsEditor}
+                            {globalCssAssetsEditor}
+                        </TabsContent>
+                    )}
+                    {globalJsAssetsEditor && (
+                        <TabsContent
+                            value="global-assets-js"
+                            className="flex-1 flex-col overflow-hidden flex h-full"
+                        >
+                            {globalJsAssetsEditor}
                         </TabsContent>
                     )}
                 </ResizablePanel>

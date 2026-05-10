@@ -30,6 +30,9 @@ export interface GlobalAssetContent {
   content: string
 }
 
+export const INJECTED_GLOBAL_CSS_ATTR = GLOBAL_CSS_STYLE_ATTR
+export const INJECTED_GLOBAL_JS_ATTR = GLOBAL_JS_SCRIPT_ATTR
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
 }
@@ -232,4 +235,20 @@ export const injectGlobalAssetsIntoHtml = (
     result = injectGlobalJsIntoHtml(result, jsContent, jsAssetNames)
   }
   return result
+}
+
+export const parseInjectedAssetNamesFromHtml = (
+  html: string,
+  attrName: string
+): string[] => {
+  const regex = new RegExp(`${attrName}=["']([^"']*)["']`, 'i')
+  const match = html.match(regex)
+  if (!match || !match[1]) {
+    return []
+  }
+
+  return match[1]
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
 }
