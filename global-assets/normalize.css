@@ -21,10 +21,12 @@
 
 html {
   font-size: 12px;
+  font-family: "Liberation Serif", "Times New Roman", serif;
 }
 
 body {
-  margin: 12mm;
+  margin: 0;
+  padding: 0;
 
   font-family: "Liberation Serif", "Times New Roman", serif;
 
@@ -101,12 +103,12 @@ table {
 
 th,
 td {
-  padding: 1px 2px;
+  padding: 0px;
 
   vertical-align: top;
   text-align: left;
 
-  line-height: 1.25;
+  line-height: 0.8;
 }
 
 th {

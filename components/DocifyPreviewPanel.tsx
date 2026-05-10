@@ -339,7 +339,7 @@ export function DocifyPreviewPanel({
                         ) : pdfUrl ? (
                             <iframe
                                 title="PDF Preview"
-                                src={pdfUrl}
+                                src={`${pdfUrl}#zoom=100`}
                                 className="w-full h-full border-0"
                             />
                         ) : (
@@ -355,7 +355,7 @@ export function DocifyPreviewPanel({
                         ) : localPdfUrl ? (
                             <iframe
                                 title="Local PDF Preview"
-                                src={localPdfUrl}
+                                src={`${localPdfUrl}#zoom=100`}
                                 className="w-full h-full border-0"
                             />
                         ) : (

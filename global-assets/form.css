@@ -12,23 +12,23 @@ body {
 
 /***Always insert a page break before the element***/
 .pb_before {
-   page-break-before: always !important;
+  page-break-before: always !important;
 }
 
 /***Always insert a page break after the element***/
 .pb_after {
-   page-break-after: always !important;
+  page-break-after: always !important;
 }
 
 /***Avoid page break before the element (if possible)***/
 .pb_before_avoid {
-   page-break-before: avoid !important;
+  page-break-before: avoid !important;
 }
 
 /***Avoid page break after the element (if possible)***/
 .pb_after_avoid {
-   page-break-after: avoid !important;
- }
+  page-break-after: avoid !important;
+}
 
 /* Avoid page break inside the element (if possible) */
 .pbi_avoid {
@@ -98,12 +98,15 @@ body {
 .mb-0 {
   margin-bottom: 0;
 }
+
 .mt-0 {
   margin-top: 0;
 }
+
 .ml-auto {
   margin-left: auto;
 }
+
 .mx-auto {
   margin-left: auto;
   margin-right: auto;
@@ -177,6 +180,7 @@ body {
   margin-bottom: 18px;
   line-height: 2.5em;
 }
+
 .list-normal li {
   margin-bottom: 12px;
   line-height: 1.5em;
@@ -219,11 +223,12 @@ body {
 
 
 table {
-  border-collapse: collapse; 
+  border-collapse: collapse;
   width: 100%;
 }
 
-tr,thead {
+tr,
+thead {
   page-break-inside: avoid !important;
   break-inside: avoid;
 }
@@ -273,15 +278,18 @@ td {
 
 
 .text-bubu-pink {
-   color: #cd5476;
+  color: #cd5476;
 }
+
 .value--bubu-pink {
-   color: #cd5476;
+  color: #cd5476;
   border-color: #cd5476;
 }
+
 .text-red {
   color: red;
 }
+
 .text-muted {
   color: #444;
 }
@@ -293,4 +301,8 @@ td {
 
 .underline {
   text-decoration: underline;
+}
+
+.bg-gray {
+  background-color: #f2f2f2;
 }
