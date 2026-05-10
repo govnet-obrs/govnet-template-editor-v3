@@ -15,12 +15,9 @@ import { extractGoTemplateVariables, mergeVariablesWithJson } from '@/lib/extrac
 import { updateDocifyTemplate, updateDocifyTemplateVariable } from '@/lib/editor-api'
 import { decodeBase64Utf8 } from '@/lib/base64'
 import {
-    buildGlobalAssetApiPath,
-    combineGlobalCssAssets,
-    combineGlobalJsAssets,
+    buildInjectedGlobalAssetsFromManifest,
     INJECTED_GLOBAL_CSS_ATTR,
     INJECTED_GLOBAL_JS_ATTR,
-    injectGlobalAssetsIntoHtml,
     maskInjectedGlobalAssetsForEditing,
     parseInjectedAssetNamesFromHtml,
     type ManifestAsset,
@@ -85,7 +82,11 @@ export default function DocifyEditorPage() {
     const [previewMode, setPreviewMode] = useState<'html' | 'pdf' | 'local'>('html')
     const [zoom] = useState(100)
     const [manifestAssets, setManifestAssets] = useState<Array<ManifestAsset & { url: string }>>([])
-    const [assetContentBySrc, setAssetContentBySrc] = useState<Record<string, string>>({})
+    const [injectedHtmlForPreview, setInjectedHtmlForPreview] = useState('')
+    const [resolvedGlobalCssContent, setResolvedGlobalCssContent] = useState('')
+    const [resolvedGlobalJsContent, setResolvedGlobalJsContent] = useState('')
+    const [resolvedGlobalCssAssetNames, setResolvedGlobalCssAssetNames] = useState<string[]>([])
+    const [resolvedGlobalJsAssetNames, setResolvedGlobalJsAssetNames] = useState<string[]>([])
     const [selectedCssAssetSrc, setSelectedCssAssetSrc] = useState('')
     const [selectedJsAssetSrc, setSelectedJsAssetSrc] = useState('')
     const [cssEditorContent, setCssEditorContent] = useState('')
@@ -136,60 +137,28 @@ export default function DocifyEditorPage() {
         [manifestAssets, templateJsAssetNames]
     )
 
-    const cssAssetsForInjection = useMemo(
-        () => cssAssetsInTemplate.filter((asset) => (assetContentBySrc[asset.src] || '').trim().length > 0),
-        [cssAssetsInTemplate, assetContentBySrc]
-    )
+    const resolveInjectedGlobalAssets = useCallback(
+        async (sourceHtml: string) => {
+            const manifestResponse = await fetch('/api/global-assets/manifest', {
+                cache: 'no-store',
+            })
 
-    const jsAssetsForInjection = useMemo(
-        () => jsAssetsInTemplate.filter((asset) => (assetContentBySrc[asset.src] || '').trim().length > 0),
-        [jsAssetsInTemplate, assetContentBySrc]
-    )
+            if (!manifestResponse.ok) {
+                throw new Error('Failed to load global assets manifest')
+            }
 
-    const globalCssContent = useMemo(
-        () =>
-            combineGlobalCssAssets(
-                cssAssetsForInjection.map((asset) => ({
-                    src: asset.src,
-                    type: 'css' as const,
-                    content: assetContentBySrc[asset.src] || '',
-                }))
-            ),
-        [cssAssetsForInjection, assetContentBySrc]
-    )
+            const manifestPayload =
+                (await manifestResponse.json()) as GlobalAssetsManifestResponse
+            const latestManifestAssets = manifestPayload.assets ?? []
+            setManifestAssets(latestManifestAssets)
 
-    const globalJsContent = useMemo(
-        () =>
-            combineGlobalJsAssets(
-                jsAssetsForInjection.map((asset) => ({
-                    src: asset.src,
-                    type: 'js' as const,
-                    content: assetContentBySrc[asset.src] || '',
-                }))
-            ),
-        [jsAssetsForInjection, assetContentBySrc]
-    )
-
-    const globalCssAssetNames = useMemo(
-        () => cssAssetsForInjection.map((asset) => asset.name || asset.src),
-        [cssAssetsForInjection]
-    )
-
-    const globalJsAssetNames = useMemo(
-        () => jsAssetsForInjection.map((asset) => asset.name || asset.src),
-        [jsAssetsForInjection]
-    )
-
-    const htmlContentWithInjectedGlobalAssets = useMemo(
-        () =>
-            injectGlobalAssetsIntoHtml(
-                htmlContent,
-                globalCssContent,
-                globalJsContent,
-                globalCssAssetNames,
-                globalJsAssetNames
-            ),
-        [htmlContent, globalCssContent, globalJsContent, globalCssAssetNames, globalJsAssetNames]
+            return buildInjectedGlobalAssetsFromManifest(
+                sourceHtml,
+                latestManifestAssets,
+                MAX_CACHEABLE_ASSET_SIZE
+            )
+        },
+        [MAX_CACHEABLE_ASSET_SIZE]
     )
 
     useEffect(() => {
@@ -239,8 +208,7 @@ export default function DocifyEditorPage() {
         }
     }, [editorStorageLoaded, editorId, getEditor])
 
-    // Load global assets (CSS and JS) from local manifest API.
-    // Binary assets are never fetched into editor state.
+    // Load global assets manifest for editor controls.
     useEffect(() => {
         const loadAssets = async () => {
             try {
@@ -256,50 +224,14 @@ export default function DocifyEditorPage() {
                     (await manifestResponse.json()) as GlobalAssetsManifestResponse
                 const manifestAssets = manifestPayload.assets ?? []
                 setManifestAssets(manifestAssets)
-                const nextAssetContentBySrc: Record<string, string> = {}
-
-                for (const asset of manifestAssets) {
-                    if (asset.type !== 'css' && asset.type !== 'js') {
-                        continue
-                    }
-
-                    const assetUrl = asset.url || buildGlobalAssetApiPath(asset.src)
-                    try {
-                        const response = await fetch(assetUrl, { cache: 'no-store' })
-                        if (!response.ok) {
-                            continue
-                        }
-
-                        // Avoid loading large CSS/JS assets into memory for preview injection.
-                        const contentLength = response.headers.get('content-length')
-                        const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : 0
-                        if (fileSizeBytes > 0 && fileSizeBytes > MAX_CACHEABLE_ASSET_SIZE) {
-                            console.warn(
-                                `Skipping large ${asset.type} asset ${asset.src} (${(
-                                    fileSizeBytes /
-                                    1024 /
-                                    1024
-                                ).toFixed(2)}MB)`
-                            )
-                            continue
-                        }
-
-                        const content = await response.text()
-                        nextAssetContentBySrc[asset.src] = content
-                    } catch (err) {
-                        console.error(`Failed to load asset ${asset.src}:`, err)
-                    }
-                }
-
-                setAssetContentBySrc(nextAssetContentBySrc)
             } catch (err) {
                 console.error('Failed to load global assets:', err)
-                setAssetContentBySrc({})
+                setManifestAssets([])
             }
         }
 
         loadAssets()
-    }, [MAX_CACHEABLE_ASSET_SIZE])
+    }, [])
 
     useEffect(() => {
         if (!selectedCssAssetSrc && cssAssetsInTemplate.length > 0) {
@@ -556,6 +488,42 @@ export default function DocifyEditorPage() {
         fetchHtmlContent()
     }, [template, initialHtmlContent, editor])
 
+    useEffect(() => {
+        let cancelled = false
+
+        const refreshInjectedPreview = async () => {
+            try {
+                const resolved = await resolveInjectedGlobalAssets(htmlContent)
+                if (cancelled) {
+                    return
+                }
+
+                setInjectedHtmlForPreview(resolved.injectedHtml)
+                setResolvedGlobalCssContent(resolved.cssContent)
+                setResolvedGlobalJsContent(resolved.jsContent)
+                setResolvedGlobalCssAssetNames(resolved.cssAssetNames)
+                setResolvedGlobalJsAssetNames(resolved.jsAssetNames)
+            } catch (err) {
+                if (cancelled) {
+                    return
+                }
+
+                console.error('Failed to resolve injected global assets:', err)
+                setInjectedHtmlForPreview(htmlContent)
+                setResolvedGlobalCssContent('')
+                setResolvedGlobalJsContent('')
+                setResolvedGlobalCssAssetNames([])
+                setResolvedGlobalJsAssetNames([])
+            }
+        }
+
+        void refreshInjectedPreview()
+
+        return () => {
+            cancelled = true
+        }
+    }, [htmlContent, cssSyncStatus, jsSyncStatus, resolveInjectedGlobalAssets])
+
     const handleBack = () => {
         if (templateId) {
             localStorage.removeItem(`template-${templateId}`)
@@ -593,12 +561,13 @@ export default function DocifyEditorPage() {
         }
 
         try {
+            const resolved = await resolveInjectedGlobalAssets(htmlContent)
             await updateDocifyTemplate(
                 {
                     templateId: template.id,
                     data: {
                         ...template,
-                        htmlContent: htmlContentWithInjectedGlobalAssets,
+                        htmlContent: resolved.injectedHtml,
                     },
                 },
                 editor
@@ -608,7 +577,25 @@ export default function DocifyEditorPage() {
             const message = err instanceof Error ? err.message : 'Failed to push HTML'
             toast.error(message)
         }
-    }, [editor, template, htmlContentWithInjectedGlobalAssets])
+    }, [editor, template, htmlContent, resolveInjectedGlobalAssets])
+
+    const handleDownloadHtml = useCallback(async () => {
+        try {
+            const resolved = await resolveInjectedGlobalAssets(htmlContent)
+            const blob = new Blob([resolved.injectedHtml || ''], { type: 'text/html;charset=utf-8' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = 'template.html'
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            setTimeout(() => URL.revokeObjectURL(url), 0)
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to download HTML'
+            toast.error(message)
+        }
+    }, [htmlContent, resolveInjectedGlobalAssets])
 
     const handleSyncMetadata = useCallback(async () => {
         if (!editor || !template) {
@@ -650,7 +637,7 @@ export default function DocifyEditorPage() {
                     expiry,
                     template: {
                         ...storedTemplate,
-                        htmlContent: htmlContentWithInjectedGlobalAssets,
+                        htmlContent: injectedHtmlForPreview,
                         sampleJsonData: variablesContent,
                         pageSettings,
                     },
@@ -661,7 +648,7 @@ export default function DocifyEditorPage() {
                 console.error('Failed to sync HTML to localStorage:', err)
             }
         }
-    }, [htmlContentWithInjectedGlobalAssets, variablesContent, pageSettings, templateId, template, isLoadingTemplate, isLoadingHtml])
+    }, [injectedHtmlForPreview, variablesContent, pageSettings, templateId, template, isLoadingTemplate, isLoadingHtml])
 
     if (isLoadingTemplate || isLoadingHtml) {
         return (
@@ -704,11 +691,11 @@ export default function DocifyEditorPage() {
                 <DocifyEditorTabs
                     currentEditor={normalizedEditorTab}
                     htmlContent={htmlContent}
-                    downloadHtmlContent={htmlContentWithInjectedGlobalAssets}
-                    globalCssContent={globalCssContent}
-                    globalCssAssetNames={globalCssAssetNames}
-                    globalJsContent={globalJsContent}
-                    globalJsAssetNames={globalJsAssetNames}
+                    downloadHtmlContent={injectedHtmlForPreview}
+                    globalCssContent={resolvedGlobalCssContent}
+                    globalCssAssetNames={resolvedGlobalCssAssetNames}
+                    globalJsContent={resolvedGlobalJsContent}
+                    globalJsAssetNames={resolvedGlobalJsAssetNames}
                     variablesContent={variablesContent}
                     pageSettings={pageSettings}
                     previewMode={previewMode}
@@ -718,10 +705,15 @@ export default function DocifyEditorPage() {
                     previewEndpoints={editor?.previewEndpoints?.length ? editor.previewEndpoints : DEFAULT_PREVIEW_ENDPOINTS}
                     selectedPreviewEndpoint={selectedPreviewEndpoint}
                     onPreviewEndpointChange={setSelectedPreviewEndpoint}
+                    resolveInjectedHtml={async (sourceHtml) => {
+                        const resolved = await resolveInjectedGlobalAssets(sourceHtml)
+                        return resolved.injectedHtml
+                    }}
                     templateName={getTemplateName()}
                     description={template.fileName || template.name || ''}
                     sampleData={variablesContent}
                     onPushHtml={handlePushHtml}
+                    onDownloadHtml={handleDownloadHtml}
                     onSyncMetadata={handleSyncMetadata}
                     onPageSettingsChange={handlePageSettingsChange}
                     onEditorChange={handleEditorChange}

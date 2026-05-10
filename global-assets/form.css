@@ -1,3 +1,8 @@
+@page {
+  size: A4;
+  margin: 15mm;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -38,11 +43,6 @@ h2 {
 
 p {
   line-height: 1.4;
-}
-
-body,
-html {
-  font-family: "Times New Roman", serif;
 }
 
 body {

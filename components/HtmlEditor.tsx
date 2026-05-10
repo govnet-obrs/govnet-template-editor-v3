@@ -13,14 +13,20 @@ export interface HtmlEditorProps {
   onHtmlChange: (value: string) => void
   zoom: number
   onPushHtml?: () => void
+  onDownloadHtml?: () => void
 }
 
-export function HtmlEditor({ htmlContent, downloadHtmlContent, onHtmlChange, zoom, onPushHtml }: HtmlEditorProps) {
+export function HtmlEditor({ htmlContent, downloadHtmlContent, onHtmlChange, zoom, onPushHtml, onDownloadHtml }: HtmlEditorProps) {
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<any>(null)
   const { resolvedTheme } = useTheme()
 
   const handleDownload = useCallback(() => {
+    if (onDownloadHtml) {
+      onDownloadHtml()
+      return
+    }
+
     const contentToDownload = downloadHtmlContent ?? htmlContent
     const blob = new Blob([contentToDownload || ''], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -31,7 +37,7 @@ export function HtmlEditor({ htmlContent, downloadHtmlContent, onHtmlChange, zoo
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 0)
-  }, [downloadHtmlContent, htmlContent])
+  }, [onDownloadHtml, downloadHtmlContent, htmlContent])
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor

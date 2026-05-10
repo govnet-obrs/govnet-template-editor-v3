@@ -36,6 +36,7 @@ interface DocifyEditorTabsProps {
     description: string
     sampleData: string
     onPushHtml: () => void
+    onDownloadHtml?: () => void
     onSyncMetadata: () => void
     onPageSettingsChange: (settings: PageSettings) => void
     onEditorChange: (value: string) => void
@@ -43,6 +44,7 @@ interface DocifyEditorTabsProps {
     onVariablesChange: (value: string) => void
     onPreviewModeChange: (mode: 'html' | 'pdf' | 'local') => void
     onPreviewEndpointChange: (endpoint: string) => void
+    resolveInjectedHtml?: (html: string) => Promise<string>
     globalCssAssetsEditor?: ReactNode
     globalJsAssetsEditor?: ReactNode
 }
@@ -67,6 +69,7 @@ export function DocifyEditorTabs({
     description,
     sampleData,
     onPushHtml,
+    onDownloadHtml,
     onSyncMetadata,
     onPageSettingsChange,
     onEditorChange,
@@ -74,6 +77,7 @@ export function DocifyEditorTabs({
     onVariablesChange,
     onPreviewModeChange,
     onPreviewEndpointChange,
+    resolveInjectedHtml,
     globalCssAssetsEditor,
     globalJsAssetsEditor,
 }: DocifyEditorTabsProps) {
@@ -138,6 +142,7 @@ export function DocifyEditorTabs({
                             onHtmlChange={onHtmlChange}
                             zoom={zoom}
                             onPushHtml={onPushHtml}
+                            onDownloadHtml={onDownloadHtml}
                         />
                     </TabsContent>
                     <TabsContent
@@ -199,6 +204,7 @@ export function DocifyEditorTabs({
                         templateName={templateName}
                         description={description}
                         sampleData={sampleData}
+                        resolveInjectedHtml={resolveInjectedHtml}
                     />
                 </ResizablePanel>
             </ResizablePanelGroup>

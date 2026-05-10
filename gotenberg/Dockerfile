@@ -7,7 +7,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN rm -f /etc/apt/sources.list.d/google-chrome.list && \
     apt-get update && \
     echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections && \
-    apt-get install -y --no-install-recommends ttf-mscorefonts-installer fontconfig fonts-dejavu && \
+    apt-get install -y --no-install-recommends \
+        ttf-mscorefonts-installer \
+        fontconfig \
+        fonts-dejavu \
+        fonts-liberation \
+        fonts-liberation2 \
+        fonts-urw-base35 && \
     fc-cache -f -v && \
     rm -rf /var/lib/apt/lists/*
 

@@ -21,16 +21,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Pagination,
   PaginationContent,
@@ -44,7 +36,6 @@ import { Plus, ChevronLeft } from 'lucide-react'
 import { useEditorStorage } from '@/hooks/useEditorStorage'
 import { toast } from 'sonner'
 import type { EditorConfig } from '@/lib/editor-types'
-import type { ManifestAsset } from '@/lib/docify-global-assets'
 
 interface PdfTemplate {
   id: string
@@ -70,13 +61,6 @@ interface TemplatesResponse {
   data?: PdfTemplate[]
 }
 
-interface GlobalAssetsManifestResponse {
-  version: string
-  assets: Array<ManifestAsset & { url: string }>
-}
-
-type AssetSyncStatus = 'idle' | 'syncing' | 'saved' | 'error'
-
 const ITEMS_PER_PAGE_OPTIONS = [24, 48, 96, 192]
 
 export default function DocifyPage() {
@@ -99,25 +83,6 @@ export default function DocifyPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState<'templates' | 'global-assets'>('templates')
-  const [manifestAssets, setManifestAssets] = useState<
-    Array<ManifestAsset & { url: string }>
-  >([])
-  const [isLoadingManifestAssets, setIsLoadingManifestAssets] = useState(false)
-  const [manifestAssetsError, setManifestAssetsError] = useState<string | null>(null)
-  const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | 'css' | 'js' | 'binary'>('all')
-  const [selectedCssAssetSrc, setSelectedCssAssetSrc] = useState('')
-  const [selectedJsAssetSrc, setSelectedJsAssetSrc] = useState('')
-  const [cssEditorContent, setCssEditorContent] = useState('')
-  const [jsEditorContent, setJsEditorContent] = useState('')
-  const [cssAutoSync, setCssAutoSync] = useState(false)
-  const [jsAutoSync, setJsAutoSync] = useState(false)
-  const [cssSyncStatus, setCssSyncStatus] = useState<AssetSyncStatus>('idle')
-  const [jsSyncStatus, setJsSyncStatus] = useState<AssetSyncStatus>('idle')
-  const [cssSyncMessage, setCssSyncMessage] = useState('')
-  const [jsSyncMessage, setJsSyncMessage] = useState('')
-  const [cssDirty, setCssDirty] = useState(false)
-  const [jsDirty, setJsDirty] = useState(false)
 
   useEffect(() => {
     if (isLoaded && editorId) {
@@ -134,196 +99,7 @@ export default function DocifyPage() {
     }
   }, [isLoaded, editorId, getEditor])
 
-  useEffect(() => {
-    const fetchManifestAssets = async () => {
-      setIsLoadingManifestAssets(true)
-      setManifestAssetsError(null)
-      try {
-        const response = await fetch('/api/global-assets/manifest', {
-          cache: 'no-store',
-        })
-        if (!response.ok) {
-          throw new Error('Failed to load global assets manifest')
-        }
-        const payload = (await response.json()) as GlobalAssetsManifestResponse
-        setManifestAssets(payload.assets || [])
-      } catch (err) {
-        setManifestAssetsError(
-          err instanceof Error ? err.message : 'Failed to load global assets manifest'
-        )
-        setManifestAssets([])
-      } finally {
-        setIsLoadingManifestAssets(false)
-      }
-    }
 
-    fetchManifestAssets()
-  }, [])
-
-  const cssAssets = manifestAssets.filter((asset) => asset.type === 'css')
-  const jsAssets = manifestAssets.filter((asset) => asset.type === 'js')
-
-  useEffect(() => {
-    if (!selectedCssAssetSrc && cssAssets.length > 0) {
-      setSelectedCssAssetSrc(cssAssets[0].src)
-    }
-  }, [cssAssets, selectedCssAssetSrc])
-
-  useEffect(() => {
-    if (!selectedJsAssetSrc && jsAssets.length > 0) {
-      setSelectedJsAssetSrc(jsAssets[0].src)
-    }
-  }, [jsAssets, selectedJsAssetSrc])
-
-  const loadAssetEditorContent = useCallback(
-    async (assetSrc: string, type: 'css' | 'js') => {
-      if (!assetSrc) {
-        if (type === 'css') {
-          setCssEditorContent('')
-          setCssDirty(false)
-        } else {
-          setJsEditorContent('')
-          setJsDirty(false)
-        }
-        return
-      }
-
-      const asset = manifestAssets.find((entry) => entry.src === assetSrc)
-      if (!asset || /^https?:\/\//i.test(asset.src)) {
-        if (type === 'css') {
-          setCssEditorContent('')
-          setCssDirty(false)
-        } else {
-          setJsEditorContent('')
-          setJsDirty(false)
-        }
-        return
-      }
-
-      try {
-        const response = await fetch(asset.url, { cache: 'no-store' })
-        if (!response.ok) {
-          throw new Error(`Failed to load ${asset.src}`)
-        }
-        const content = await response.text()
-        if (type === 'css') {
-          setCssEditorContent(content)
-          setCssDirty(false)
-          setCssSyncStatus('idle')
-          setCssSyncMessage('')
-        } else {
-          setJsEditorContent(content)
-          setJsDirty(false)
-          setJsSyncStatus('idle')
-          setJsSyncMessage('')
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : `Failed to load ${assetSrc}`
-        if (type === 'css') {
-          setCssSyncStatus('error')
-          setCssSyncMessage(message)
-        } else {
-          setJsSyncStatus('error')
-          setJsSyncMessage(message)
-        }
-      }
-    },
-    [manifestAssets]
-  )
-
-  useEffect(() => {
-    if (selectedCssAssetSrc) {
-      loadAssetEditorContent(selectedCssAssetSrc, 'css')
-    }
-  }, [selectedCssAssetSrc, loadAssetEditorContent])
-
-  useEffect(() => {
-    if (selectedJsAssetSrc) {
-      loadAssetEditorContent(selectedJsAssetSrc, 'js')
-    }
-  }, [selectedJsAssetSrc, loadAssetEditorContent])
-
-  const syncAssetContent = useCallback(
-    async (type: 'css' | 'js') => {
-      const selectedSrc = type === 'css' ? selectedCssAssetSrc : selectedJsAssetSrc
-      const content = type === 'css' ? cssEditorContent : jsEditorContent
-
-      if (!selectedSrc) {
-        return
-      }
-
-      if (type === 'css') {
-        setCssSyncStatus('syncing')
-        setCssSyncMessage('Syncing...')
-      } else {
-        setJsSyncStatus('syncing')
-        setJsSyncMessage('Syncing...')
-      }
-
-      try {
-        const response = await fetch('/api/global-assets/sync', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            src: selectedSrc,
-            type,
-            content,
-          }),
-        })
-
-        if (!response.ok) {
-          const payload = (await response.json()) as { error?: string }
-          throw new Error(payload.error || 'Sync failed')
-        }
-
-        if (type === 'css') {
-          setCssSyncStatus('saved')
-          setCssSyncMessage('Synced')
-          setCssDirty(false)
-        } else {
-          setJsSyncStatus('saved')
-          setJsSyncMessage('Synced')
-          setJsDirty(false)
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Sync failed'
-        if (type === 'css') {
-          setCssSyncStatus('error')
-          setCssSyncMessage(message)
-        } else {
-          setJsSyncStatus('error')
-          setJsSyncMessage(message)
-        }
-      }
-    },
-    [selectedCssAssetSrc, selectedJsAssetSrc, cssEditorContent, jsEditorContent]
-  )
-
-  useEffect(() => {
-    if (!cssAutoSync || !cssDirty || !selectedCssAssetSrc) {
-      return
-    }
-
-    const timeout = setTimeout(() => {
-      void syncAssetContent('css')
-    }, 800)
-
-    return () => clearTimeout(timeout)
-  }, [cssAutoSync, cssDirty, selectedCssAssetSrc, cssEditorContent, syncAssetContent])
-
-  useEffect(() => {
-    if (!jsAutoSync || !jsDirty || !selectedJsAssetSrc) {
-      return
-    }
-
-    const timeout = setTimeout(() => {
-      void syncAssetContent('js')
-    }, 800)
-
-    return () => clearTimeout(timeout)
-  }, [jsAutoSync, jsDirty, selectedJsAssetSrc, jsEditorContent, syncAssetContent])
 
   const buildAuthHeaders = useCallback(
     (editorConfig: EditorConfig, includeJson: boolean = true): HeadersInit => {
@@ -682,26 +458,7 @@ export default function DocifyPage() {
           </p>
         </div>
 
-        {/* Tabs Section */}
-        <div className="mb-6 flex items-center gap-3 border-b border-border pb-4">
-          <Button
-            variant={activeTab === 'templates' ? 'default' : 'ghost'}
-            className="gap-2"
-            onClick={() => setActiveTab('templates')}
-          >
-            📋 Templates
-          </Button>
-          <Button
-            variant={activeTab === 'global-assets' ? 'default' : 'ghost'}
-            className="gap-2"
-            onClick={() => setActiveTab('global-assets')}
-          >
-            🌐 Global Assets
-          </Button>
-        </div>
-
         {/* PDF Templates Section */}
-        {activeTab === 'templates' && (
         <div className="mb-8">
           <div className="mb-6 flex items-center justify-between">
             <div>
@@ -1016,239 +773,6 @@ export default function DocifyPage() {
             </>
           )}
         </div>
-        )}
-
-        {/* Global Assets Section */}
-        {activeTab === 'global-assets' && (
-        <div className="mb-8">
-          <div className="mb-6">
-            <div>
-              <h2 className="text-2xl font-bold">Global Assets</h2>
-              <p className="text-sm text-muted-foreground">
-                Listed from global-assets manifest and loaded through local API routes
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4 rounded-md border border-border p-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm">Filter:</Label>
-              <div className="flex flex-wrap gap-2">
-                {(['all', 'css', 'js', 'binary'] as const).map((filter) => (
-                  <Button
-                    key={filter}
-                    variant={assetTypeFilter === filter ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAssetTypeFilter(filter)}
-                  >
-                    {filter === 'all' ? 'All' : filter === 'css' ? 'CSS' : filter === 'js' ? 'JS' : 'Binary'}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {manifestAssetsError && (
-              <Card className="border-destructive/50 bg-destructive/5">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-destructive">{manifestAssetsError}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {isLoadingManifestAssets && (
-              <p className="text-sm text-muted-foreground">Loading manifest assets...</p>
-            )}
-
-            {!isLoadingManifestAssets &&
-              manifestAssets.filter(
-                (asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter
-              ).length === 0 && (
-                <div className="py-8 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No assets found in global-assets manifest for this filter.
-                  </p>
-                </div>
-              )}
-
-            <div className="space-y-2">
-              {manifestAssets
-                .filter((asset) => assetTypeFilter === 'all' || asset.type === assetTypeFilter)
-                .map((asset) => {
-                  const canPreviewImage =
-                    asset.type === 'binary' &&
-                    /\.(png|jpe?g|gif|webp|svg)$/i.test(asset.src)
-
-                  return (
-                    <div key={asset.src} className="rounded border border-border px-3 py-3 text-sm">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{asset.name}</p>
-                          <p className="text-xs text-muted-foreground">{asset.src}</p>
-                        </div>
-                        <Badge variant="secondary" className="text-xs">
-                          {asset.type === 'js' ? 'JavaScript' : asset.type === 'css' ? 'CSS' : 'Binary'}
-                        </Badge>
-                      </div>
-
-                      {asset.description && (
-                        <p className="mb-2 text-xs text-muted-foreground">{asset.description}</p>
-                      )}
-
-                      {canPreviewImage ? (
-                        <img
-                          src={asset.url}
-                          alt={asset.name}
-                          className="max-h-36 rounded border border-border object-contain"
-                        />
-                      ) : asset.type === 'binary' ? (
-                        <p className="text-xs text-muted-foreground">
-                          Preview not available for this binary asset type in browser.
-                        </p>
-                      ) : (
-                        <a
-                          href={asset.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary underline"
-                        >
-                          Open file
-                        </a>
-                      )}
-                    </div>
-                  )
-                })}
-            </div>
-
-            <div className="mt-6 grid gap-4 border-t border-border pt-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded border border-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-sm font-medium">Global CSS Editor</Label>
-                  <div className="flex items-center gap-2 text-xs">
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={cssAutoSync}
-                        onChange={(event) => setCssAutoSync(event.target.checked)}
-                      />
-                      Auto sync
-                    </label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void syncAssetContent('css')}
-                      disabled={!selectedCssAssetSrc || cssSyncStatus === 'syncing'}
-                    >
-                      {cssSyncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
-                    </Button>
-                  </div>
-                </div>
-
-                <Select
-                  value={selectedCssAssetSrc}
-                  onValueChange={(value) => setSelectedCssAssetSrc(value || '')}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select CSS asset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cssAssets.map((asset) => (
-                      <SelectItem key={asset.src} value={asset.src}>
-                        {asset.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Textarea
-                  value={cssEditorContent}
-                  onChange={(event) => {
-                    setCssEditorContent(event.target.value)
-                    setCssDirty(true)
-                    if (cssSyncStatus !== 'syncing') {
-                      setCssSyncStatus('idle')
-                      setCssSyncMessage('')
-                    }
-                  }}
-                  className="min-h-56 font-mono text-xs"
-                  placeholder="CSS asset content"
-                />
-                {cssSyncMessage && (
-                  <p
-                    className={`text-xs ${
-                      cssSyncStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {cssSyncMessage}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-3 rounded border border-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-sm font-medium">Global JavaScript Editor</Label>
-                  <div className="flex items-center gap-2 text-xs">
-                    <label className="flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={jsAutoSync}
-                        onChange={(event) => setJsAutoSync(event.target.checked)}
-                      />
-                      Auto sync
-                    </label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void syncAssetContent('js')}
-                      disabled={!selectedJsAssetSrc || jsSyncStatus === 'syncing'}
-                    >
-                      {jsSyncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
-                    </Button>
-                  </div>
-                </div>
-
-                <Select
-                  value={selectedJsAssetSrc}
-                  onValueChange={(value) => setSelectedJsAssetSrc(value || '')}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select JavaScript asset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {jsAssets.map((asset) => (
-                      <SelectItem key={asset.src} value={asset.src}>
-                        {asset.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Textarea
-                  value={jsEditorContent}
-                  onChange={(event) => {
-                    setJsEditorContent(event.target.value)
-                    setJsDirty(true)
-                    if (jsSyncStatus !== 'syncing') {
-                      setJsSyncStatus('idle')
-                      setJsSyncMessage('')
-                    }
-                  }}
-                  className="min-h-56 font-mono text-xs"
-                  placeholder="JavaScript asset content"
-                />
-                {jsSyncMessage && (
-                  <p
-                    className={`text-xs ${
-                      jsSyncStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {jsSyncMessage}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        )}
 
       {selectedTemplateIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-lg border border-border bg-background p-3 shadow-lg">

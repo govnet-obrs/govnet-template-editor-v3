@@ -38,6 +38,14 @@ export interface GlobalAssetContent {
   content: string
 }
 
+export interface InjectedGlobalAssetsResult {
+  injectedHtml: string
+  cssContent: string
+  jsContent: string
+  cssAssetNames: string[]
+  jsAssetNames: string[]
+}
+
 export const INJECTED_GLOBAL_CSS_ATTR = GLOBAL_CSS_STYLE_ATTR
 export const INJECTED_GLOBAL_JS_ATTR = GLOBAL_JS_SCRIPT_ATTR
 
@@ -275,4 +283,99 @@ export const parseInjectedAssetNamesFromHtml = (
     .split(',')
     .map((name) => name.trim())
     .filter(Boolean)
+}
+
+export const buildInjectedGlobalAssetsFromManifest = async (
+  html: string,
+  manifestAssets: Array<ManifestAsset & { url?: string }>,
+  maxCacheableAssetSize?: number
+): Promise<InjectedGlobalAssetsResult> => {
+  const cssNamesFromHtml = parseInjectedAssetNamesFromHtml(html, INJECTED_GLOBAL_CSS_ATTR)
+  const jsNamesFromHtml = parseInjectedAssetNamesFromHtml(html, INJECTED_GLOBAL_JS_ATTR)
+
+  const cssNameSet = new Set(cssNamesFromHtml.map((name) => name.toLowerCase()))
+  const jsNameSet = new Set(jsNamesFromHtml.map((name) => name.toLowerCase()))
+
+  const cssAssets = manifestAssets.filter(
+    (asset) => asset.type === 'css' && cssNameSet.has(asset.name.toLowerCase())
+  )
+  const jsAssets = manifestAssets.filter(
+    (asset) => asset.type === 'js' && jsNameSet.has(asset.name.toLowerCase())
+  )
+
+  const loadedCssAssets: GlobalAssetContent[] = []
+  const loadedJsAssets: GlobalAssetContent[] = []
+
+  const loadAssetContent = async (asset: ManifestAsset & { url?: string }): Promise<string | null> => {
+    const assetUrl = asset.url || buildGlobalAssetApiPath(asset.src)
+    const response = await fetch(assetUrl, { cache: 'no-store' })
+    if (!response.ok) {
+      return null
+    }
+
+    if (maxCacheableAssetSize && maxCacheableAssetSize > 0) {
+      const contentLength = response.headers.get('content-length')
+      const fileSizeBytes = contentLength ? parseInt(contentLength, 10) : 0
+      if (fileSizeBytes > 0 && fileSizeBytes > maxCacheableAssetSize) {
+        return null
+      }
+    }
+
+    return response.text()
+  }
+
+  for (const asset of cssAssets) {
+    try {
+      const content = await loadAssetContent(asset)
+      if (content === null) {
+        continue
+      }
+      loadedCssAssets.push({
+        src: asset.src,
+        type: 'css',
+        content,
+      })
+    } catch {
+      // Best-effort loading: skip failed assets and continue.
+    }
+  }
+
+  for (const asset of jsAssets) {
+    try {
+      const content = await loadAssetContent(asset)
+      if (content === null) {
+        continue
+      }
+      loadedJsAssets.push({
+        src: asset.src,
+        type: 'js',
+        content,
+      })
+    } catch {
+      // Best-effort loading: skip failed assets and continue.
+    }
+  }
+
+  const cssContent = combineGlobalCssAssets(loadedCssAssets)
+  const jsContent = combineGlobalJsAssets(loadedJsAssets)
+  const cssAssetNames = cssAssets
+    .filter((asset) => loadedCssAssets.some((loadedAsset) => loadedAsset.src === asset.src))
+    .map((asset) => asset.name)
+  const jsAssetNames = jsAssets
+    .filter((asset) => loadedJsAssets.some((loadedAsset) => loadedAsset.src === asset.src))
+    .map((asset) => asset.name)
+
+  return {
+    injectedHtml: injectGlobalAssetsIntoHtml(
+      html,
+      cssContent,
+      jsContent,
+      cssAssetNames,
+      jsAssetNames
+    ),
+    cssContent,
+    jsContent,
+    cssAssetNames,
+    jsAssetNames,
+  }
 }
